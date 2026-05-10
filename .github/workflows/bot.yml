@@ -72,13 +72,14 @@ jobs:
           # ── 通知 ──
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_USER_ID: ${{ secrets.TG_USER_ID }}
           TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
 
           # ── 评论 ──
           NS_COMMENT: ${{ secrets.NS_COMMENT }}
           NS_COMMENT_URL: ${{ secrets.NS_COMMENT_URL }}
-          NS_DELAY_MIN: ${{ vars.NS_DELAY_MIN }}
-          NS_DELAY_MAX: ${{ vars.NS_DELAY_MAX }}
+          NS_DELAY_MIN: "0"
+          NS_DELAY_MAX: "0"
           HEADLESS: "true"
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python nodeseek_bot.py

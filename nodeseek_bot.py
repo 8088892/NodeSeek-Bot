@@ -69,6 +69,19 @@ def tg_send(title, msg):
             print(f"通知发送失败: {e}")
 
 
+def tg_send_photo(path, caption=""):
+    """发送图片到 Telegram"""
+    if not TG_BOT_TOKEN or not TG_CHAT_ID:
+        return
+    try:
+        import requests as py_requests
+        url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendPhoto"
+        with open(path, "rb") as f:
+            py_requests.post(url, data={"chat_id": TG_CHAT_ID, "caption": caption}, files={"photo": f}, timeout=15)
+    except Exception as e:
+        print(f"发送图片失败: {e}")
+
+
 def detect_environment():
     """检测运行环境"""
     if os.path.exists("/ql/data/") or os.path.exists("/ql/config/"):
@@ -343,10 +356,34 @@ def selenium_comment(ns_cookie):
         driver.get(COMMENT_URL)
         time.sleep(5)
 
-        # 获取帖子列表
-        posts = WebDriverWait(driver, 30).until(
-            EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".post-list-item"))
-        )
+        # 获取帖子列表 — 支持多种 CSS 选择器
+        post_selectors = [
+            ".post-list-item",       # 旧版 NodeSeek
+            ".topic-list-item",       # 可能的变体
+            "article.post",           # 通用帖子元素
+            "tr.topic-item",          # 表格布局
+            "[data-tid]",             # 通用数据属性
+        ]
+        posts = None
+        for sel in post_selectors:
+            try:
+                posts = WebDriverWait(driver, 10).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, sel))
+                )
+                if posts:
+                    print(f"使用选择器 '{sel}' 找到 {len(posts)} 个帖子")
+                    break
+            except:
+                continue
+
+        if not posts:
+            # 截图调试
+            driver.save_screenshot("no_posts_found.png")
+            tg_send_photo("no_posts_found.png", caption="❌ 未找到帖子列表元素")
+            print("未找到任何帖子，页面标题:", driver.title)
+            body_text = driver.find_element(By.TAG_NAME, "body").text[:300]
+            print("页面内容预览:", body_text)
+            return 0
         # 过滤置顶帖
         valid_posts = [p for p in posts if not p.find_elements(By.CSS_SELECTOR, ".pined")]
         post_count = random.randint(3, 5)
