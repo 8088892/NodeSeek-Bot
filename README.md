@@ -38,13 +38,17 @@ Fork 即用的 NodeSeek 论坛自动化工具，支持 **自动签到** + **自�
 |------|------|
 | `NS_COOKIE` | Cookie 字符串，多账号用 `&` 或 `\|` 分隔 |
 
-### 验证码（账号密码登录必须）
+### 🧩 验证码（账号密码登录必须）
+
+推荐使用 **YesCaptcha**（最低充值 $1 起，按次计费，便宜好用）：
+
+👉 [注册 YesCaptcha](https://yescaptcha.com/i/fyzjbA)
 
 | 变量 | 说明 |
 |------|------|
-| `SOLVER_TYPE` | `turnstile` 或 `yescaptcha` |
-| `API_BASE_URL` | 验证码 API 地址 |
-| `CLIENTT_KEY` | 验证码 Client Key |
+| `SOLVER_TYPE` | 填 `yescaptcha` |
+| `API_BASE_URL` | `https://api.yescaptcha.com` |
+| `CLIENTT_KEY` | YesCaptcha 后台的 Client Key |
 
 ### GitHub（Cookie 自动保存需要）
 
