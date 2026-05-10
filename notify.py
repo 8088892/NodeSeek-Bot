@@ -580,6 +580,7 @@ def telegram_bot(title: str, content: str) -> None:
         "chat_id": str(push_config.get("TG_USER_ID")),
         "message_thread_id": str(push_config.get("TG_THREAD_ID")),
         "text": f"{title}\n\n{content}",
+        "parse_mode": "HTML",
         "disable_web_page_preview": "true",
     }
     proxies = None
@@ -602,6 +603,16 @@ def telegram_bot(title: str, content: str) -> None:
 
     if response["ok"]:
         print("tg 推送成功！")
+    elif "parse" in response.get("description", "").lower():
+        # HTML 解析失败，回退为纯文本
+        del payload["parse_mode"]
+        response = requests.post(
+            url=url, headers=headers, params=payload, proxies=proxies
+        ).json()
+        if response["ok"]:
+            print("tg 推送成功！（HTML 回退为纯文本）")
+        else:
+            print("tg 推送失败！")
     else:
         print("tg 推送失败！")
 
