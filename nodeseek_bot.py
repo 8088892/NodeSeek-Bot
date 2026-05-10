@@ -373,7 +373,6 @@ def selenium_comment(ns_cookie):
             options=chrome_options,
             headless=use_headless,
             use_subprocess=True,
-            version_main=chrome_major_version,
         )
         driver.set_window_size(1920, 1080)
         print("Chrome 启动成功")
