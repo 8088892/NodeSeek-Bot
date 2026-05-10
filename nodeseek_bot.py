@@ -1,0 +1,585 @@
+# -*- coding: utf-8 -*-
+"""
+NodeSeek Bot — 自动签到 + 自动评论 + 多账号
+整合自:
+  - kafuneri/NodeSeek-Signin (API 签到 + 验证码 + 账号密码登录)
+  - nova73x/nodeseek-AutoDaily-signin (Selenium 自动评论)
+"""
+
+import os
+import re
+import json
+import time
+import random
+import traceback
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from curl_cffi import requests as cffi_requests
+from yescaptcha import YesCaptchaSolver, YesCaptchaSolverError
+from turnstile_solver import TurnstileSolver, TurnstileSolverError
+
+# ── 可选模块 ──────────────────────────────────────────
+hadsend = False
+send = None
+try:
+    from notify import send
+    hadsend = True
+except ImportError:
+    print("未加载通知模块，跳过 Telegram 通知功能")
+
+# ── 随机评论语料 ──────────────────────────────────────
+COMMENT_TEXTS = [
+    "bd", "绑定", "帮顶", "吃瓜吃瓜", "好价", "过来看一下",
+    "喝杯奶茶压压惊", "咕噜咕噜", "前排", "悄悄地我来了悄悄地又走了",
+    "恭喜发财", "好基", "公道公道", "楼主不错 绑定", "还可以",
+    "再看看吧", "楼下要了", "挺不错的 bdbd", "好价 好价",
+    "给楼下点个", "祝早出", "观望一下 早出", "让给楼下",
+    "bd 可惜用不上 楼下来秒了", "还要啥自行车", "卷起来",
+    "就是这个feel", "这是什么东西", "吗喽~~~", "收了吧楼下",
+    "bd一下", "bd",
+]
+
+# ── 配置 ──────────────────────────────────────────────
+SOLVER_TYPE = os.getenv("SOLVER_TYPE", "turnstile")
+API_BASE_URL = os.getenv("API_BASE_URL", "")
+CLIENT_KEY = os.getenv("CLIENTT_KEY", "")
+NS_RANDOM = os.getenv("NS_RANDOM", "true")
+
+# 通知配置
+TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
+TG_CHAT_ID = os.getenv("TG_CHAT_ID") or os.getenv("TG_USER_ID", "")
+TG_THREAD_ID = os.getenv("TG_THREAD_ID", "")
+
+# 评论配置
+NS_COMMENT = os.getenv("NS_COMMENT", "true").lower() != "false"
+COMMENT_URL = os.getenv("NS_COMMENT_URL", "") or "https://www.nodeseek.com/categories/trade"
+NS_DELAY_MIN = int(os.getenv("NS_DELAY_MIN", "0"))
+NS_DELAY_MAX = int(os.getenv("NS_DELAY_MAX", "10"))
+
+
+def tg_send(title, msg):
+    """通过 notify 模块发送 Telegram 通知"""
+    if hadsend:
+        try:
+            send(title, msg)
+        except Exception as e:
+            print(f"通知发送失败: {e}")
+
+
+def detect_environment():
+    """检测运行环境"""
+    if os.path.exists("/ql/data/") or os.path.exists("/ql/config/"):
+        return "qinglong"
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return "github"
+    return "local"
+
+
+# ── GitHub 变量管理 ───────────────────────────────────
+def save_cookie_to_github(var_name, cookie):
+    """保存 Cookie 到 GitHub Actions Variables"""
+    import requests as py_requests
+    token = os.environ.get("GH_PAT")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not token or not repo:
+        print("GH_PAT/GITHUB_REPOSITORY 未设置，跳过变量保存")
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+    }
+    url_check = f"https://api.github.com/repos/{repo}/actions/variables/{var_name}"
+    url_create = f"https://api.github.com/repos/{repo}/actions/variables"
+    data = {"name": var_name, "value": cookie}
+
+    resp = py_requests.patch(url_check, headers=headers, json=data)
+    if resp.status_code == 204:
+        print(f"GitHub: {var_name} 更新成功")
+        return True
+    elif resp.status_code == 404:
+        resp = py_requests.post(url_create, headers=headers, json=data)
+        if resp.status_code == 201:
+            print(f"GitHub: {var_name} 创建成功")
+            return True
+    print(f"GitHub 操作失败: {resp.status_code}")
+    return False
+
+
+def save_cookie(var_name, cookie):
+    """根据环境保存 Cookie"""
+    if detect_environment() == "github":
+        return save_cookie_to_github(var_name, cookie)
+    return False
+
+
+# ── API 签到 ───────────────────────────────────────────
+def api_sign(ns_cookie):
+    """通过 API 签到，返回 (status, message)"""
+    if not ns_cookie:
+        return "invalid", "无有效 Cookie"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
+        "origin": "https://www.nodeseek.com",
+        "referer": "https://www.nodeseek.com/board",
+        "Content-Type": "application/json",
+        "Cookie": ns_cookie,
+    }
+    try:
+        url = f"https://www.nodeseek.com/api/attendance?random={NS_RANDOM}"
+        resp = cffi_requests.post(url, headers=headers, impersonate="chrome110")
+        data = resp.json()
+        msg = data.get("message", "")
+        if "鸡腿" in msg or data.get("success"):
+            return "success", msg
+        elif "已完成签到" in msg:
+            return "already", msg
+        elif data.get("status") == 404:
+            return "invalid", msg
+        return "fail", msg
+    except Exception as e:
+        return "error", str(e)
+
+
+# ── 账号密码登录 + 验证码 ─────────────────────────────
+def session_login(user, password):
+    """使用账号密码登录，返回 cookie 字符串"""
+    try:
+        if SOLVER_TYPE.lower() == "yescaptcha":
+            solver = YesCaptchaSolver(
+                api_base_url=API_BASE_URL or "https://api.yescaptcha.com",
+                client_key=CLIENT_KEY,
+            )
+        else:
+            solver = TurnstileSolver(
+                api_base_url=API_BASE_URL,
+                client_key=CLIENT_KEY,
+            )
+
+        token = solver.solve(
+            url="https://www.nodeseek.com/signIn.html",
+            sitekey="0x4AAAAAAAaNy7leGjewpVyR",
+            verbose=True,
+        )
+        if not token:
+            print("验证码解析失败")
+            return None
+    except Exception as e:
+        print(f"验证码错误: {e}")
+        return None
+
+    session = cffi_requests.Session(impersonate="chrome110")
+    session.get("https://www.nodeseek.com/signIn.html")
+
+    data = {
+        "username": user,
+        "password": password,
+        "token": token,
+        "source": "turnstile",
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
+        "sec-ch-ua": '"Not A(Brand";v="99", "Microsoft Edge";v="121", "Chromium";v="121"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "origin": "https://www.nodeseek.com",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+        "referer": "https://www.nodeseek.com/signIn.html",
+        "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = session.post(
+            "https://www.nodeseek.com/api/account/signIn",
+            json=data,
+            headers=headers,
+        )
+        resp_json = resp.json()
+        if resp_json.get("success"):
+            cookies = session.cookies.get_dict()
+            return "; ".join([f"{k}={v}" for k, v in cookies.items()])
+        else:
+            print(f"登录失败: {resp_json.get('message')}")
+            return None
+    except Exception as e:
+        print(f"登录异常: {e}")
+        return None
+
+
+# ── 签到统计 ──────────────────────────────────────────
+def get_signin_stats(ns_cookie, days=30):
+    """查询近 N 天签到统计"""
+    if not ns_cookie:
+        return None, "无有效 Cookie"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36",
+        "origin": "https://www.nodeseek.com",
+        "referer": "https://www.nodeseek.com/board",
+        "Cookie": ns_cookie,
+    }
+    try:
+        tz = ZoneInfo("Asia/Shanghai")
+        now = datetime.now(tz)
+        start = now - timedelta(days=days)
+
+        all_records = []
+        for page in range(1, 21):
+            url = f"https://www.nodeseek.com/api/account/credit/page-{page}"
+            resp = cffi_requests.get(url, headers=headers, impersonate="chrome110")
+            data = resp.json()
+            if not data.get("success") or not data.get("data"):
+                break
+
+            records = data["data"]
+            if not records:
+                break
+
+            last_time = datetime.fromisoformat(records[-1][3].replace("Z", "+00:00"))
+            if last_time.astimezone(tz) < start:
+                all_records.extend(
+                    r for r in records
+                    if datetime.fromisoformat(r[3].replace("Z", "+00:00")).astimezone(tz) >= start
+                )
+                break
+            all_records.extend(records)
+            time.sleep(0.5)
+
+        signin_records = []
+        for record in all_records:
+            amount, balance, description, timestamp = record
+            rt = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(tz)
+            if rt >= start and "签到收益" in description and "鸡腿" in description:
+                signin_records.append({
+                    "amount": amount,
+                    "date": rt.strftime("%m-%d"),
+                })
+
+        if not signin_records:
+            return {"total": 0, "avg": 0, "days": 0, "period": f"近{days}天"}, "无签到记录"
+
+        total = sum(r["amount"] for r in signin_records)
+        return {
+            "total": total,
+            "avg": round(total / len(signin_records), 1),
+            "days": len(signin_records),
+            "period": f"近{days}天",
+        }, "ok"
+    except Exception as e:
+        return None, str(e)
+
+
+# ── 随机延迟 ──────────────────────────────────────────
+def random_delay():
+    if NS_DELAY_MAX <= 0:
+        return
+    actual_min = min(NS_DELAY_MIN, NS_DELAY_MAX)
+    actual_max = max(NS_DELAY_MIN, NS_DELAY_MAX)
+    delay_minutes = random.randint(actual_min, actual_max)
+    if delay_minutes > 0:
+        print(f"⏳ 随机延迟 {delay_minutes} 分钟后执行...")
+        time.sleep(delay_minutes * 60)
+
+
+# ── Selenium 评论 ─────────────────────────────────────
+def selenium_comment(ns_cookie):
+    """使用 Selenium 模拟浏览器评论"""
+    if not NS_COMMENT:
+        print("评论功能已关闭")
+        return 0
+
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from selenium.webdriver.common.keys import Keys
+        from selenium.webdriver.common.action_chains import ActionChains
+    except ImportError:
+        print("Selenium 未安装，跳过评论功能")
+        print("如需评论功能: pip install selenium undetected-chromedriver")
+        return 0
+
+    try:
+        import undetected_chromedriver as uc
+    except ImportError:
+        print("undetected-chromedriver 未安装，跳过评论")
+        return 0
+
+    driver = None
+    comment_count = 0
+    try:
+        print("正在初始化浏览器...")
+        options = uc.ChromeOptions()
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--lang=zh-CN,zh")
+
+        use_headless = os.getenv("HEADLESS", "true").lower() == "true"
+        driver = uc.Chrome(options=options, headless=use_headless, use_subprocess=True)
+
+        # 设置 Cookie
+        driver.get("https://www.nodeseek.com")
+        time.sleep(3)
+        for item in ns_cookie.split(";"):
+            try:
+                name, value = item.strip().split("=", 1)
+                driver.add_cookie({"name": name, "value": value, "domain": ".nodeseek.com"})
+            except:
+                continue
+        driver.refresh()
+        time.sleep(3)
+
+        # 打开评论区域
+        print(f"正在访问评论区域: {COMMENT_URL}")
+        driver.get(COMMENT_URL)
+        time.sleep(5)
+
+        # 获取帖子列表
+        posts = WebDriverWait(driver, 30).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".post-list-item"))
+        )
+        # 过滤置顶帖
+        valid_posts = [p for p in posts if not p.find_elements(By.CSS_SELECTOR, ".pined")]
+        post_count = random.randint(3, 5)
+        selected = random.sample(valid_posts, min(post_count, len(valid_posts)))
+
+        selected_urls = []
+        for post in selected:
+            try:
+                link = post.find_element(By.CSS_SELECTOR, ".post-title a")
+                selected_urls.append(link.get_attribute("href"))
+            except:
+                continue
+
+        consecutive_failures = 0
+        for i, post_url in enumerate(selected_urls):
+            if consecutive_failures >= 2:
+                print("连续失败 2 次，停止评论")
+                break
+
+            try:
+                print(f"  评论 [{i+1}/{len(selected_urls)}]: {post_url}")
+                driver.get(post_url)
+                time.sleep(3)
+
+                editor = WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".CodeMirror"))
+                )
+                driver.execute_script("arguments[0].click();", editor)
+                time.sleep(0.5)
+                input_text = random.choice(COMMENT_TEXTS)
+
+                try:
+                    driver.execute_script(
+                        "var cm=arguments[0].CodeMirror;if(cm)cm.setValue(arguments[1]);",
+                        editor, input_text,
+                    )
+                except:
+                    actions = ActionChains(driver)
+                    for char in input_text:
+                        actions.send_keys(char)
+                        actions.pause(random.uniform(0.1, 0.3))
+                    actions.perform()
+
+                time.sleep(2)
+                submit = WebDriverWait(driver, 20).until(
+                    EC.element_to_be_clickable((
+                        By.XPATH,
+                        "//button[contains(@class,'submit') and contains(text(),'发布评论')]",
+                    ))
+                )
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", submit)
+                time.sleep(0.5)
+                driver.execute_script("arguments[0].click();", submit)
+
+                print(f"  ✅ 已评论: {input_text}")
+                comment_count += 1
+                consecutive_failures = 0
+
+                wait_sec = random.uniform(60, 120)
+                print(f"  等待 {wait_sec:.0f} 秒...")
+                time.sleep(wait_sec)
+
+            except Exception as e:
+                print(f"  ⚠️ 评论失败: {e}")
+                consecutive_failures += 1
+                try:
+                    driver.get("https://www.nodeseek.com")
+                    time.sleep(2)
+                except:
+                    break
+
+        print(f"评论任务完成，共 {comment_count} 条")
+        return comment_count
+
+    except Exception as e:
+        print(f"评论模块异常: {e}")
+        traceback.print_exc()
+        return comment_count
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
+
+
+# ── 主流程 ────────────────────────────────────────────
+if __name__ == "__main__":
+    env_type = detect_environment()
+    print(f"运行环境: {env_type}")
+
+    # ── 收集账号 ──
+    # 方式1: 账号密码登录
+    accounts_pw = []
+    user = os.getenv("USER")
+    password = os.getenv("PASS")
+    if user and password:
+        accounts_pw.append({"user": user, "password": password})
+
+    idx = 1
+    while True:
+        u = os.getenv(f"USER{idx}")
+        p = os.getenv(f"PASS{idx}")
+        if u and p:
+            accounts_pw.append({"user": u, "password": p})
+            idx += 1
+        else:
+            break
+
+    # 方式2: 直接 Cookie 登录（用 & 或 | 分隔多账号）
+    raw_cookie = os.getenv("NS_COOKIE", "")
+    cookie_list = []
+    if raw_cookie:
+        # 支持 & 和 | 两种分隔符
+        if "&" in raw_cookie and "|" not in raw_cookie:
+            cookie_list = [c.strip() for c in raw_cookie.split("&") if c.strip()]
+        else:
+            cookie_list = [c.strip() for c in raw_cookie.split("|") if c.strip()]
+
+    print(f"  账号密码登录: {len(accounts_pw)} 个")
+    print(f"  Cookie 登录: {len(cookie_list)} 个")
+
+    if len(accounts_pw) == 0 and len(cookie_list) == 0:
+        print("未配置任何账号！")
+        print("请设置 secrets: USER+PASS 或 NS_COOKIE")
+        exit(1)
+
+    # ── 随机延迟 ──
+    random_delay()
+
+    # ── 逐账号执行 ──
+    all_results = []
+    cookies_updated = False
+    final_cookie_list = list(cookie_list)
+
+    # 先处理账号密码登录的
+    for acc in accounts_pw:
+        display = acc["user"]
+        print(f"\n{'='*50}")
+        print(f"账号: {display} (账号密码登录)")
+        print(f"{'='*50}")
+
+        result = {"name": display, "sign": "failed", "reward": "0", "comments": 0, "error": None}
+
+        # 登录获取 cookie
+        print("正在登录...")
+        new_cookie = session_login(acc["user"], acc["password"])
+        if not new_cookie:
+            result["error"] = "登录失败"
+            all_results.append(result)
+            tg_send("NodeSeek 登录失败", f"账号 {display} 登录失败")
+            continue
+
+        print("登录成功，开始签到...")
+        status, msg = api_sign(new_cookie)
+
+        if status in ("success", "already"):
+            result["sign"] = status
+            result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "?"
+            print(f"签到: {status} — {msg}")
+
+            # 签到统计
+            stats, _ = get_signin_stats(new_cookie, 30)
+            if stats:
+                result["stats"] = stats
+                print(f"  近30天: {stats['days']}天签到, 共{stats['total']}鸡腿")
+
+            # Cookie 保存
+            final_cookie_list.append(new_cookie)
+            cookies_updated = True
+        else:
+            result["error"] = f"签到失败: {msg}"
+            print(f"签到失败: {msg}")
+
+        # 评论
+        if NS_COMMENT:
+            result["comments"] = selenium_comment(new_cookie)
+
+        all_results.append(result)
+
+    # Cookie 登录的账号
+    for i, cookie in enumerate(cookie_list):
+        idx_label = len(accounts_pw) + i + 1
+        display = f"Cookie账号{idx_label}"
+        print(f"\n{'='*50}")
+        print(f"账号: {display} (Cookie 登录)")
+        print(f"{'='*50}")
+
+        result = {"name": display, "sign": "failed", "reward": "0", "comments": 0, "error": None}
+
+        status, msg = api_sign(cookie)
+        if status in ("success", "already"):
+            result["sign"] = status
+            result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "?"
+            print(f"签到: {status} — {msg}")
+
+            stats, _ = get_signin_stats(cookie, 30)
+            if stats:
+                result["stats"] = stats
+                print(f"  近30天: {stats['days']}天签到, 共{stats['total']}鸡腿")
+        else:
+            print(f"签到失败: {msg}")
+            # Cookie 过期但没配置密码，尝试重新登录？
+            result["error"] = f"Cookie 失效: {msg}"
+
+        if NS_COMMENT and not result.get("error"):
+            result["comments"] = selenium_comment(cookie)
+
+        all_results.append(result)
+
+    # ── 保存更新后的 Cookie ──
+    if cookies_updated and final_cookie_list:
+        all_cookies_new = "&".join([c for c in final_cookie_list if c.strip()])
+        save_cookie("NS_COOKIE", all_cookies_new)
+
+    # ── 汇总通知 ──
+    beijing_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
+
+    lines = []
+    for r in all_results:
+        name = r["name"]
+        if r.get("error"):
+            lines.append(f"  ❌ {name}: {r['error']}")
+        else:
+            sign_icon = "✅" if r["sign"] in ("success", "already") else "❌"
+            stats_str = ""
+            if r.get("stats") and r["stats"]["days"] > 0:
+                stats_str = f" | 近30天 {r['stats']['days']}天 {r['stats']['total']}🍗"
+            lines.append(f"  {sign_icon} {name}: +{r['reward']}🍗 | 💬{r['comments']}条{stats_str}")
+
+    report = f"""<b>NodeSeek 每日简报</b>
+━━━━━━━━━━━━━━━
+{chr(10).join(lines)}
+━━━━━━━━━━━━━━━
+🕐 {beijing_time}"""
+
+    print(f"\n{report.replace('<b>','').replace('</b>','')}")
+    tg_send("NodeSeek 签到", report)

@@ -1,0 +1,84 @@
+name: NodeSeek 签到+评论
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '05 16 * * *'   # 北京时间 00:05
+    - cron: '05 4 * * *'    # 北京时间 12:05
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  run:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v3
+
+      - name: 安装 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 安装 Chrome (评论功能需要)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg xvfb fonts-wqy-zenhei
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          echo "Chrome: $(google-chrome --version)"
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 运行签到+评论
+        env:
+          # ── 账号配置 ──
+          USER: ${{ secrets.USER }}
+          PASS: ${{ secrets.PASS }}
+          USER1: ${{ secrets.USER1 }}
+          PASS1: ${{ secrets.PASS1 }}
+          USER2: ${{ secrets.USER2 }}
+          PASS2: ${{ secrets.PASS2 }}
+          USER3: ${{ secrets.USER3 }}
+          PASS3: ${{ secrets.PASS3 }}
+          USER4: ${{ secrets.USER4 }}
+          PASS4: ${{ secrets.PASS4 }}
+          USER5: ${{ secrets.USER5 }}
+          PASS5: ${{ secrets.PASS5 }}
+
+          # ── Cookie 配置 ──
+          NS_COOKIE: ${{ vars.NS_COOKIE || secrets.NS_COOKIE }}
+
+          # ── 验证码 ──
+          SOLVER_TYPE: ${{ secrets.SOLVER_TYPE }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          CLIENTT_KEY: ${{ secrets.CLIENTT_KEY }}
+
+          # ── GitHub API ──
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+          # ── 通知 ──
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          TG_THREAD_ID: ${{ secrets.TG_THREAD_ID }}
+
+          # ── 评论 ──
+          NS_COMMENT: ${{ secrets.NS_COMMENT }}
+          NS_COMMENT_URL: ${{ secrets.NS_COMMENT_URL }}
+          NS_DELAY_MIN: ${{ vars.NS_DELAY_MIN }}
+          NS_DELAY_MAX: ${{ vars.NS_DELAY_MAX }}
+          HEADLESS: "true"
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python nodeseek_bot.py
