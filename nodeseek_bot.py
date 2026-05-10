@@ -654,7 +654,10 @@ if __name__ == "__main__":
             if status in ("success", "already"):
                 active_cookie = saved_cookie
                 result["sign"] = status
-                result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "?"
+                if status == "already":
+                    result["reward"] = "已签"
+                else:
+                    result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "0"
                 print(f"Cookie 签到: {status} — {msg}")
             else:
                 print(f"Cookie 失效: {msg}")
@@ -670,7 +673,10 @@ if __name__ == "__main__":
                 status, msg = api_sign(new_cookie)
                 if status in ("success", "already"):
                     result["sign"] = status
-                    result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "?"
+                    if status == "already":
+                        result["reward"] = "已签"
+                    else:
+                        result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "0"
                     print(f"签到: {status} — {msg}")
                 else:
                     result["error"] = f"签到失败: {msg}"
@@ -698,8 +704,8 @@ if __name__ == "__main__":
 
         all_results.append(result)
 
-    # ── 保存更新后的 Cookie ──
-    if cookies_updated and new_cookie_list:
+    # ── 保存 Cookie（每次运行都保存，清理残留，防止同一账号重复）──
+    if new_cookie_list:
         all_cookies_new = "|".join([c for c in new_cookie_list if c.strip()])
         save_cookie("NS_COOKIE", all_cookies_new)
 
@@ -713,16 +719,16 @@ if __name__ == "__main__":
             lines.append(f"  ❌ {name}: {r['error']}")
         else:
             sign_icon = "✅" if r["sign"] in ("success", "already") else "❌"
+            reward_str = r["reward"] if r["reward"] == "已签" else f"+{r['reward']}🍗"
             stats_str = ""
             if r.get("stats") and r["stats"]["days"] > 0:
                 stats_str = f" | 近30天 {r['stats']['days']}天 {r['stats']['total']}🍗"
-            lines.append(f"  {sign_icon} {name}: +{r['reward']}🍗 | 💬{r['comments']}条{stats_str}")
+            lines.append(f"  {sign_icon} {name}: {reward_str} | 💬{r['comments']}条{stats_str}")
 
-    report = f"""<b>NodeSeek 每日简报</b>
-━━━━━━━━━━━━━━━
+    report_body = f"""━━━━━━━━━━━━━━━
 {chr(10).join(lines)}
 ━━━━━━━━━━━━━━━
 🕐 {beijing_time}"""
 
-    print(f"\n{report.replace('<b>','').replace('</b>','')}")
-    tg_send("NodeSeek 签到", report)
+    print(f"\nNodeSeek 每日简报\n{report_body}")
+    tg_send("<b>NodeSeek 每日简报</b>", report_body)
