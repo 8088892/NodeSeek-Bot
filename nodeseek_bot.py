@@ -301,8 +301,21 @@ def random_delay():
 
 
 # ── Selenium 评论 ─────────────────────────────────────
+def _wait_for_cloudflare(driver, max_wait=30):
+    """等待 Cloudflare 验证通过"""
+    for i in range(max_wait // 3):
+        title = driver.title
+        if "Just a moment" in title or "Attention Required" in title or "Checking" in title:
+            print(f"等待 Cloudflare 验证... (已等待 {i*3} 秒)")
+            time.sleep(3)
+        else:
+            return True
+    print("Cloudflare 验证超时")
+    return False
+
+
 def selenium_comment(ns_cookie):
-    """使用 Selenium 模拟浏览器评论"""
+    """使用 Selenium 模拟浏览器评论 — 适配 nova73x 的 Cloudflare 绕过方案"""
     if not NS_COMMENT:
         print("评论功能已关闭")
         return 0
@@ -312,11 +325,9 @@ def selenium_comment(ns_cookie):
         from selenium.webdriver.common.by import By
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
-        from selenium.webdriver.common.keys import Keys
         from selenium.webdriver.common.action_chains import ActionChains
     except ImportError:
-        print("Selenium 未安装，跳过评论功能")
-        print("如需评论功能: pip install selenium undetected-chromedriver")
+        print("Selenium 未安装，跳过评论")
         return 0
 
     try:
@@ -328,27 +339,67 @@ def selenium_comment(ns_cookie):
     driver = None
     comment_count = 0
     try:
-        print("正在初始化浏览器...")
-        options = uc.ChromeOptions()
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--lang=zh-CN,zh")
+        print("正在初始化浏览器 (非 headless + xvfb 虚拟显示器)...")
 
-        use_headless = os.getenv("HEADLESS", "true").lower() == "true"
-        driver = uc.Chrome(options=options, headless=use_headless, use_subprocess=True)
+        # 自动检测 Chrome 版本
+        chrome_major_version = None
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["google-chrome", "--version"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                v = result.stdout.strip().split()[-1]
+                chrome_major_version = int(v.split(".")[0])
+                print(f"检测到 Chrome 版本: {v} (主版本: {chrome_major_version})")
+        except Exception:
+            print("Chrome 版本检测失败，使用 UC 默认版本")
 
-        # 设置 Cookie
+        chrome_options = uc.ChromeOptions()
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        chrome_options.add_argument("--disable-infobars")
+        chrome_options.add_argument("--lang=zh-CN,zh")
+        chrome_options.add_argument("--window-size=1920,1080")
+
+        use_headless = os.getenv("HEADLESS", "false").lower() == "true"
+        if not use_headless:
+            print("使用 xvfb 虚拟显示器模式 (非 headless)，可绕过 Cloudflare")
+
+        driver = uc.Chrome(
+            options=chrome_options,
+            headless=use_headless,
+            use_subprocess=True,
+            version_main=chrome_major_version,
+        )
+        driver.set_window_size(1920, 1080)
+        print("Chrome 启动成功")
+
+        # 先访问网站再设 Cookie（绕过 Cloudflare 的关键）
+        print("正在设置 Cookie...")
         driver.get("https://www.nodeseek.com")
-        time.sleep(3)
+        time.sleep(5)
+
         for item in ns_cookie.split(";"):
             try:
                 name, value = item.strip().split("=", 1)
-                driver.add_cookie({"name": name, "value": value, "domain": ".nodeseek.com"})
+                driver.add_cookie({
+                    "name": name,
+                    "value": value,
+                    "domain": ".nodeseek.com",
+                    "path": "/",
+                })
             except:
                 continue
+
         driver.refresh()
+        time.sleep(3)
+
+        # 等待 Cloudflare 验证通过（关键步骤！）
+        _wait_for_cloudflare(driver)
         time.sleep(3)
 
         # 打开评论区域
@@ -356,13 +407,17 @@ def selenium_comment(ns_cookie):
         driver.get(COMMENT_URL)
         time.sleep(5)
 
+        # 等待 Cloudflare（页面切换可能再次触发）
+        _wait_for_cloudflare(driver)
+        time.sleep(3)
+
         # 获取帖子列表 — 支持多种 CSS 选择器
         post_selectors = [
-            ".post-list-item",       # 旧版 NodeSeek
-            ".topic-list-item",       # 可能的变体
-            "article.post",           # 通用帖子元素
-            "tr.topic-item",          # 表格布局
-            "[data-tid]",             # 通用数据属性
+            ".post-list-item",
+            ".topic-list-item",
+            "article.post",
+            "tr.topic-item",
+            "[data-tid]",
         ]
         posts = None
         for sel in post_selectors:
@@ -377,13 +432,13 @@ def selenium_comment(ns_cookie):
                 continue
 
         if not posts:
-            # 截图调试
             driver.save_screenshot("no_posts_found.png")
             tg_send_photo("no_posts_found.png", caption="❌ 未找到帖子列表元素")
             print("未找到任何帖子，页面标题:", driver.title)
             body_text = driver.find_element(By.TAG_NAME, "body").text[:300]
             print("页面内容预览:", body_text)
             return 0
+
         # 过滤置顶帖
         valid_posts = [p for p in posts if not p.find_elements(By.CSS_SELECTOR, ".pined")]
         post_count = random.randint(3, 5)
@@ -407,6 +462,7 @@ def selenium_comment(ns_cookie):
                 print(f"  评论 [{i+1}/{len(selected_urls)}]: {post_url}")
                 driver.get(post_url)
                 time.sleep(3)
+                _wait_for_cloudflare(driver)
 
                 editor = WebDriverWait(driver, 20).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, ".CodeMirror"))
