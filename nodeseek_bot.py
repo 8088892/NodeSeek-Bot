@@ -704,8 +704,8 @@ if __name__ == "__main__":
 
         all_results.append(result)
 
-    # ── 保存 Cookie（每次运行都保存，清理残留，防止同一账号重复）──
-    if new_cookie_list:
+    # ── Cookie 过期时才保存（密码登录刷新后）──
+    if cookies_updated and new_cookie_list:
         all_cookies_new = "|".join([c for c in new_cookie_list if c.strip()])
         save_cookie("NS_COOKIE", all_cookies_new)
 
