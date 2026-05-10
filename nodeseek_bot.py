@@ -54,8 +54,10 @@ TG_THREAD_ID = os.getenv("TG_THREAD_ID", "")
 # 评论配置
 NS_COMMENT = os.getenv("NS_COMMENT", "true").lower() != "false"
 COMMENT_URL = os.getenv("NS_COMMENT_URL", "") or "https://www.nodeseek.com/categories/trade"
-NS_DELAY_MIN = int(os.getenv("NS_DELAY_MIN", "0"))
-NS_DELAY_MAX = int(os.getenv("NS_DELAY_MAX", "10"))
+_delay_min_raw = os.getenv("NS_DELAY_MIN", "0") or "0"
+_delay_max_raw = os.getenv("NS_DELAY_MAX", "10") or "10"
+NS_DELAY_MIN = int(_delay_min_raw)
+NS_DELAY_MAX = int(_delay_max_raw)
 
 
 def tg_send(title, msg):
