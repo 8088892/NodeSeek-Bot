@@ -531,8 +531,7 @@ if __name__ == "__main__":
     env_type = detect_environment()
     print(f"运行环境: {env_type}")
 
-    # ── 收集账号 ──
-    # 方式1: 账号密码登录
+    # ── 收集账号密码 ──
     accounts_pw = []
     user = os.getenv("USER")
     password = os.getenv("PASS")
@@ -549,106 +548,97 @@ if __name__ == "__main__":
         else:
             break
 
-    # 方式2: 直接 Cookie 登录（用 | 分隔多账号，不用 & 避免 Cookie 值里的 & 被误切）
+    # ── 收集已保存的 Cookie ──
     raw_cookie = os.getenv("NS_COOKIE", "")
-    cookie_list = []
-    if raw_cookie:
-        cookie_list = [c.strip() for c in raw_cookie.split("|") if c.strip()]
+    saved_cookies = [c.strip() for c in raw_cookie.split("|") if c.strip()]
 
-    print(f"  账号密码登录: {len(accounts_pw)} 个")
-    print(f"  Cookie 登录: {len(cookie_list)} 个")
+    print(f"  密码账号: {len(accounts_pw)} 个")
+    print(f"  已存 Cookie: {len(saved_cookies)} 个")
 
-    if len(accounts_pw) == 0 and len(cookie_list) == 0:
-        print("未配置任何账号！")
-        print("请设置 secrets: USER+PASS 或 NS_COOKIE")
+    if len(accounts_pw) == 0 and len(saved_cookies) == 0:
+        print("未配置任何账号！请设置 USER+PASS 或 NS_COOKIE")
         exit(1)
 
     # ── 随机延迟 ──
     random_delay()
 
-    # ── 逐账号执行 ──
+    # ── 逐账号执行：Cookie 优先，过期则用密码刷新 ──
     all_results = []
     cookies_updated = False
-    final_cookie_list = list(cookie_list)
+    new_cookie_list = []
 
-    # 先处理账号密码登录的
-    for acc in accounts_pw:
-        display = acc["user"]
+    # 确定要处理的总账号数 = max(密码账号数, 已存cookie数)
+    total = max(len(accounts_pw), len(saved_cookies))
+
+    for i in range(total):
+        # 取密码（可能没有）
+        pw_info = accounts_pw[i] if i < len(accounts_pw) else None
+        display = pw_info["user"] if pw_info else f"Cookie账号{i+1}"
+
+        # 取 Cookie（可能没有）
+        saved_cookie = saved_cookies[i] if i < len(saved_cookies) else ""
+
         print(f"\n{'='*50}")
-        print(f"账号: {display} (账号密码登录)")
+        print(f"账号: {display}")
         print(f"{'='*50}")
 
         result = {"name": display, "sign": "failed", "reward": "0", "comments": 0, "error": None}
+        active_cookie = ""
 
-        # 登录获取 cookie
-        print("正在登录...")
-        new_cookie = session_login(acc["user"], acc["password"])
-        if not new_cookie:
-            result["error"] = "登录失败"
-            all_results.append(result)
-            tg_send("NodeSeek 登录失败", f"账号 {display} 登录失败")
-            continue
+        # 1. 先尝试用已保存的 Cookie 签到
+        if saved_cookie:
+            print("尝试 Cookie 签到...")
+            status, msg = api_sign(saved_cookie)
+            if status in ("success", "already"):
+                active_cookie = saved_cookie
+                result["sign"] = status
+                result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "?"
+                print(f"Cookie 签到: {status} — {msg}")
+            else:
+                print(f"Cookie 失效: {msg}")
 
-        print("登录成功，开始签到...")
-        status, msg = api_sign(new_cookie)
+        # 2. Cookie 无效或无Cookie，尝试密码登录
+        if not active_cookie and pw_info:
+            print("Cookie 无效，使用密码登录...")
+            new_cookie = session_login(pw_info["user"], pw_info["password"])
+            if new_cookie:
+                print("登录成功，使用新 Cookie 签到...")
+                active_cookie = new_cookie
+                cookies_updated = True
+                status, msg = api_sign(new_cookie)
+                if status in ("success", "already"):
+                    result["sign"] = status
+                    result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "?"
+                    print(f"签到: {status} — {msg}")
+                else:
+                    result["error"] = f"签到失败: {msg}"
+            else:
+                result["error"] = "登录失败"
 
-        if status in ("success", "already"):
-            result["sign"] = status
-            result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "?"
-            print(f"签到: {status} — {msg}")
+        # 3. 既没有有效Cookie也没有密码
+        if not active_cookie and not pw_info:
+            result["error"] = "Cookie 过期且无密码配置"
 
-            # 签到统计
-            stats, _ = get_signin_stats(new_cookie, 30)
+        # 签到统计
+        if active_cookie:
+            stats, _ = get_signin_stats(active_cookie, 30)
             if stats:
                 result["stats"] = stats
                 print(f"  近30天: {stats['days']}天签到, 共{stats['total']}鸡腿")
-
-            # Cookie 保存
-            final_cookie_list.append(new_cookie)
-            cookies_updated = True
-        else:
-            result["error"] = f"签到失败: {msg}"
-            print(f"签到失败: {msg}")
 
         # 评论
-        if NS_COMMENT:
-            result["comments"] = selenium_comment(new_cookie)
+        if NS_COMMENT and active_cookie:
+            result["comments"] = selenium_comment(active_cookie)
 
-        all_results.append(result)
-
-    # Cookie 登录的账号
-    for i, cookie in enumerate(cookie_list):
-        idx_label = len(accounts_pw) + i + 1
-        display = f"Cookie账号{idx_label}"
-        print(f"\n{'='*50}")
-        print(f"账号: {display} (Cookie 登录)")
-        print(f"{'='*50}")
-
-        result = {"name": display, "sign": "failed", "reward": "0", "comments": 0, "error": None}
-
-        status, msg = api_sign(cookie)
-        if status in ("success", "already"):
-            result["sign"] = status
-            result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "?"
-            print(f"签到: {status} — {msg}")
-
-            stats, _ = get_signin_stats(cookie, 30)
-            if stats:
-                result["stats"] = stats
-                print(f"  近30天: {stats['days']}天签到, 共{stats['total']}鸡腿")
-        else:
-            print(f"签到失败: {msg}")
-            # Cookie 过期但没配置密码，尝试重新登录？
-            result["error"] = f"Cookie 失效: {msg}"
-
-        if NS_COMMENT and not result.get("error"):
-            result["comments"] = selenium_comment(cookie)
+        # 收集有效 Cookie
+        if active_cookie:
+            new_cookie_list.append(active_cookie)
 
         all_results.append(result)
 
     # ── 保存更新后的 Cookie ──
-    if cookies_updated and final_cookie_list:
-        all_cookies_new = "|".join([c for c in final_cookie_list if c.strip()])
+    if cookies_updated and new_cookie_list:
+        all_cookies_new = "|".join([c for c in new_cookie_list if c.strip()])
         save_cookie("NS_COOKIE", all_cookies_new)
 
     # ── 汇总通知 ──
