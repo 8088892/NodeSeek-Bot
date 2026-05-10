@@ -29,15 +29,24 @@ except ImportError:
     print("未加载通知模块，跳过 Telegram 通知功能")
 
 # ── 随机评论语料 ──────────────────────────────────────
-COMMENT_TEXTS = [
-    "bd", "绑定", "帮顶", "吃瓜吃瓜", "好价", "过来看一下",
-    "喝杯奶茶压压惊", "咕噜咕噜", "前排", "悄悄地我来了悄悄地又走了",
+# 出帖（卖东西）：帮顶类中性评论，绝不用「祝早出」
+COMMENT_SELLING = [
+    "bd", "绑定", "帮顶", "好价", "过来看一下",
+    "喝杯奶茶压压惊", "咕噜咕噜", "前排",
     "恭喜发财", "好基", "公道公道", "楼主不错 绑定", "还可以",
-    "再看看吧", "楼下要了", "挺不错的 bdbd", "好价 好价",
-    "给楼下点个", "祝早出", "观望一下 早出", "让给楼下",
+    "挺不错的 bdbd", "好价 好价",
+    "给楼下点个", "让给楼下",
     "bd 可惜用不上 楼下来秒了", "还要啥自行车", "卷起来",
-    "就是这个feel", "这是什么东西", "吗喽~~~", "收了吧楼下",
-    "bd一下", "bd",
+    "就是这个feel", "吗喽~~~", "收了吧楼下",
+    "bd一下", "bd", "吃瓜吃瓜",
+]
+
+# 收帖（买东西）：祝愿类评论
+COMMENT_BUYING = [
+    "祝早收", "祝早收 好价", "早收 绑定",
+    "祝早收 bd", "绑定 祝早收",
+    "祝早收 顶一下", "帮顶 祝早收",
+    "祝早收 楼下可能有",
 ]
 
 # ── 配置 ──────────────────────────────────────────────
@@ -301,6 +310,48 @@ def random_delay():
 
 
 # ── Selenium 评论 ─────────────────────────────────────
+def _detect_post_type(driver):
+    """检测帖子类型：'selling'（出）、'buying'（收）、'unknown'"""
+    try:
+        page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
+    except:
+        return "unknown"
+
+    # 标题通常在 h1 或 .post-title 里
+    title = ""
+    try:
+        title = driver.find_element(By.CSS_SELECTOR, "h1, .post-title, .topic-title").text.lower()
+    except:
+        pass
+
+    combined = title + " " + page_text[:500]
+
+    # 收帖关键词（权重更高，先匹配）
+    buying_keywords = ["收", "求购", "求", "想要", "想收", "收一个", "收台", "收个"]
+    selling_keywords = ["出", "出售", "卖", "甩卖", "明盘", "改邮箱", "带邮箱", "push", "PUSH"]
+
+    # 先检查收帖
+    for kw in buying_keywords:
+        if kw in title or kw in combined.split()[:50]:
+            return "buying"
+
+    # 检查出帖
+    for kw in selling_keywords:
+        if kw in title:
+            return "selling"
+
+    return "unknown"  # 未知默认当出帖处理（帮顶安全）
+
+
+def _pick_comment(post_type):
+    """根据帖子类型选合适的评论"""
+    if post_type == "buying":
+        return random.choice(COMMENT_BUYING)
+    else:
+        # selling 和 unknown 都用出帖评论（帮顶安全）
+        return random.choice(COMMENT_SELLING)
+
+
 def _wait_for_cloudflare(driver, max_wait=30):
     """等待 Cloudflare 验证通过"""
     for i in range(max_wait // 3):
@@ -453,10 +504,17 @@ def selenium_comment(ns_cookie):
                 continue
 
         consecutive_failures = 0
+        visited_urls = set()  # 防止同一帖子重复评论
         for i, post_url in enumerate(selected_urls):
             if consecutive_failures >= 2:
                 print("连续失败 2 次，停止评论")
                 break
+
+            # 去重检查
+            if post_url in visited_urls:
+                print(f"  跳过已评论帖子: {post_url}")
+                continue
+            visited_urls.add(post_url)
 
             try:
                 print(f"  评论 [{i+1}/{len(selected_urls)}]: {post_url}")
@@ -464,12 +522,16 @@ def selenium_comment(ns_cookie):
                 time.sleep(3)
                 _wait_for_cloudflare(driver)
 
+                # 检测帖子类型，选对应评论语
+                post_type = _detect_post_type(driver)
+                input_text = _pick_comment(post_type)
+                print(f"  帖子类型: {post_type} → 评论: {input_text}")
+
                 editor = WebDriverWait(driver, 20).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, ".CodeMirror"))
                 )
                 driver.execute_script("arguments[0].click();", editor)
                 time.sleep(0.5)
-                input_text = random.choice(COMMENT_TEXTS)
 
                 try:
                     driver.execute_script(
