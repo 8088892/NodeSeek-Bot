@@ -548,15 +548,11 @@ if __name__ == "__main__":
         else:
             break
 
-    # 方式2: 直接 Cookie 登录（用 & 或 | 分隔多账号）
+    # 方式2: 直接 Cookie 登录（用 | 分隔多账号，不用 & 避免 Cookie 值里的 & 被误切）
     raw_cookie = os.getenv("NS_COOKIE", "")
     cookie_list = []
     if raw_cookie:
-        # 支持 & 和 | 两种分隔符
-        if "&" in raw_cookie and "|" not in raw_cookie:
-            cookie_list = [c.strip() for c in raw_cookie.split("&") if c.strip()]
-        else:
-            cookie_list = [c.strip() for c in raw_cookie.split("|") if c.strip()]
+        cookie_list = [c.strip() for c in raw_cookie.split("|") if c.strip()]
 
     print(f"  账号密码登录: {len(accounts_pw)} 个")
     print(f"  Cookie 登录: {len(cookie_list)} 个")
@@ -651,7 +647,7 @@ if __name__ == "__main__":
 
     # ── 保存更新后的 Cookie ──
     if cookies_updated and final_cookie_list:
-        all_cookies_new = "&".join([c for c in final_cookie_list if c.strip()])
+        all_cookies_new = "|".join([c for c in final_cookie_list if c.strip()])
         save_cookie("NS_COOKIE", all_cookies_new)
 
     # ── 汇总通知 ──

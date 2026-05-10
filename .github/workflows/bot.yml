@@ -29,25 +29,15 @@ jobs:
       - name: 安装 Chrome (评论功能需要)
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget gnupg xvfb fonts-wqy-zenhei
-          # 安装特定版本 Chrome（避免版本不匹配）
-          CHROME_VER="131.0.6778.204"
-          wget -q "https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROME_VER}-1_amd64.deb" \
-            -O /tmp/chrome.deb 2>/dev/null || \
-          wget -q "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VER}/linux64/chrome-linux64.zip" \
-            -O /tmp/chrome.zip 2>/dev/null
-          if [ -f /tmp/chrome.deb ]; then
-            sudo dpkg -i /tmp/chrome.deb || sudo apt-get install -f -y
-          elif [ -f /tmp/chrome.zip ]; then
-            unzip /tmp/chrome.zip -d /tmp/chrome
-            sudo ln -sf /tmp/chrome/chrome-linux64/chrome /usr/bin/google-chrome
-          else
-            # 回退：安装最新版
+          sudo apt-get install -y xvfb fonts-wqy-zenhei
+          # 使用系统的 Chrome，不额外安装
+          google-chrome --version || echo "Chrome not found, installing..."
+          if ! command -v google-chrome &>/dev/null; then
             wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
             echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
             sudo apt-get update && sudo apt-get install -y google-chrome-stable
           fi
-          echo "Chrome: $(google-chrome --version 2>/dev/null || echo 'install failed')"
+          echo "Chrome: $(google-chrome --version)"
 
       - name: 安装 Python 依赖
         run: |
