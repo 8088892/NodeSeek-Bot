@@ -432,13 +432,30 @@ def _detect_post_type(driver):
     return "unknown"
 
 
-def _pick_comment(post_type):
-    """根据帖子类型选合适的评论；完成态和无法判断时不评论"""
+def _pick_comment(post_type, title_text=""):
+    """根据帖子类型选评论；已完成态不评论，unknown 做温和兜底"""
     if post_type == "buying":
         return random.choice(COMMENT_BUYING)
     if post_type == "selling":
         return random.choice(COMMENT_SELLING)
-    return ""
+    if post_type in {"sold", "bought", "done"}:
+        return ""
+
+    title_norm = _normalize_trade_text(title_text)
+
+    # unknown 时适度放宽：只看标题里的弱交易信号，不看正文，避免误伤
+    weak_buying_markers = ["收", "求", "蹲", "来一个", "来一台"]
+    weak_selling_markers = ["出", "卖", "转", "明盘", "小甩"]
+    skip_markers = ["已出", "已售", "已收", "已求到", "结帖", "完结", "封贴"]
+
+    if any(marker in title_norm for marker in skip_markers):
+        return ""
+    if any(marker in title_norm for marker in weak_buying_markers):
+        return random.choice(COMMENT_BUYING)
+    if any(marker in title_norm for marker in weak_selling_markers):
+        return random.choice(COMMENT_SELLING)
+
+    return random.choice(COMMENT_SELLING)
 
 
 def _wait_for_cloudflare(driver, max_wait=30):
@@ -613,10 +630,17 @@ def selenium_comment(ns_cookie):
 
                 # 检测帖子类型，选对应评论语
                 post_type = _detect_post_type(driver)
-                input_text = _pick_comment(post_type)
+                post_title = ""
+                try:
+                    post_title = driver.find_element(By.CSS_SELECTOR, "h1, .post-title, .topic-title").text.strip()
+                except:
+                    pass
+                input_text = _pick_comment(post_type, post_title)
                 if not input_text:
+                    print(f"  标题: {post_title or '（未取到标题）'}")
                     print(f"  帖子类型: {post_type} → 无安全评论模板，跳过")
                     continue
+                print(f"  标题: {post_title or '（未取到标题）'}")
                 print(f"  帖子类型: {post_type} → 评论: {input_text}")
 
                 editor = WebDriverWait(driver, 20).until(
