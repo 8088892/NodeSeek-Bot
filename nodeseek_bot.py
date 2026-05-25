@@ -29,25 +29,40 @@ except ImportError:
     print("未加载通知模块，跳过 Telegram 通知功能")
 
 # ── 随机评论语料 ──────────────────────────────────────
-# 出帖（卖东西）：帮顶类中性评论，绝不用「祝早出」
+# 出帖（卖东西）：尽量短、自然，像路人顺手回一嘴
 COMMENT_SELLING = [
-    "bd", "绑定", "帮顶", "好价", "过来看一下",
-    "喝杯奶茶压压惊", "咕噜咕噜", "前排",
-    "恭喜发财", "好基", "公道公道", "楼主不错 绑定", "还可以",
-    "挺不错的 bdbd", "好价 好价",
-    "给楼下点个", "让给楼下",
-    "bd 可惜用不上 楼下来秒了", "还要啥自行车", "卷起来",
-    "就是这个feel", "吗喽~~~", "收了吧楼下",
-    "bd一下", "bd", "吃瓜吃瓜",
+    "帮顶一下，价格看着还挺实在",
+    "路过帮顶，祝早点出掉",
+    "看了下，感觉还不错，帮顶",
+    "这帖看着挺正常，顺手帮顶",
+    "价格还行，帮你顶一下",
+    "配置和描述都挺清楚，帮顶",
+    "先帮顶一手，祝顺利出",
+    "有需要的可以看看，顺手顶下",
+    "帮顶，感觉应该挺快就能出",
+    "看着还可以，给你顶一下",
+    "路过支持一下，祝交易顺利",
+    "顺手帮顶，等个有缘人",
+    "这个价位看着还行，帮顶一下",
+    "帮顶，蹲个刚好需要的人",
 ]
 
-# 收帖（买东西）：祝愿类评论
+# 收帖（买东西）：尽量像真人，不要太像统一模板
 COMMENT_BUYING = [
-    "祝早收", "祝早收 好价", "早收 绑定",
-    "祝早收 bd", "绑定 祝早收",
-    "祝早收 顶一下", "帮顶 祝早收",
-    "祝早收 楼下可能有",
+    "帮顶一下，祝早收到",
+    "路过帮顶，祝你收到合适的",
+    "先帮你顶顶，蹲个好价",
+    "祝早收，感觉会有人出的",
+    "帮顶，等等看应该有楼下",
+    "顺手顶一下，祝收到心仪的",
+    "帮你顶顶，祝顺利收到",
+    "路过支持一下，祝早收",
+    "先帮顶，等个合适的来",
+    "帮顶一手，希望你早点蹲到",
 ]
+
+# 状态已完成的帖子不评论
+COMMENT_DONE = []
 
 # ── 配置 ──────────────────────────────────────────────
 SOLVER_TYPE = os.getenv("SOLVER_TYPE", "turnstile")
@@ -310,46 +325,120 @@ def random_delay():
 
 
 # ── Selenium 评论 ─────────────────────────────────────
+def _normalize_trade_text(text):
+    """清洗交易帖文本，去掉常见装饰符号，便于关键词/正则判断"""
+    if not text:
+        return ""
+    text = text.lower()
+    # 去掉常见中括号/书名号/emoji风格装饰，只保留关键信息
+    text = re.sub(r"[\[\]【】()（）<>《》「」『』|｜~～·•✨🔥⭐️✅❌✔️✖️]+", " ", text)
+    text = re.sub(r"\s+", "", text)
+    return text
+
+
+def _match_trade_patterns(text, patterns):
+    """按顺序匹配正则/字符串规则，命中即返回 True"""
+    for pattern in patterns:
+        if pattern.startswith("re:"):
+            if re.search(pattern[3:], text):
+                return True
+        elif pattern in text:
+            return True
+    return False
+
+
 def _detect_post_type(driver):
-    """检测帖子类型：'selling'（出）、'buying'（收）、'unknown'"""
+    """检测帖子类型：selling / buying / sold / bought / done / unknown"""
     try:
         page_text = driver.find_element(By.TAG_NAME, "body").text.lower()
     except:
         return "unknown"
 
-    # 标题通常在 h1 或 .post-title 里
     title = ""
     try:
         title = driver.find_element(By.CSS_SELECTOR, "h1, .post-title, .topic-title").text.lower()
     except:
         pass
 
-    combined = title + " " + page_text[:500]
+    title_norm = _normalize_trade_text(title)
+    body_norm = _normalize_trade_text(page_text[:1800])
 
-    # 收帖关键词（权重更高，先匹配）
-    buying_keywords = ["收", "求购", "求", "想要", "想收", "收一个", "收台", "收个"]
-    selling_keywords = ["出", "出售", "卖", "甩卖", "明盘", "改邮箱", "带邮箱", "push", "PUSH"]
+    sold_patterns = [
+        "已出", "已售", "已无", "已转", "已处理", "出掉了", "出完了", "sold",
+        "re:(全部|已经)?出完", "re:已出给", "re:已出勿念", "re:已出谢谢",
+    ]
+    bought_patterns = [
+        "已收", "已求到", "已蹲到", "已买", "已购入", "收到了", "收到啦", "bought",
+        "re:已经?收到", "re:已收到", "re:收到谢谢", "re:求到了",
+    ]
+    continue_selling_patterns = [
+        "继续出", "还在出", "继续卖", "继续挂", "还剩", "还有", "补一台", "补一个",
+        "re:已出.*还(有|剩)", "re:已售.*还(有|剩)", "re:继续出.*", "re:补.*(台|个|枚|只)",
+    ]
+    continue_buying_patterns = [
+        "继续收", "还在收", "继续求", "继续蹲", "再收", "还收", "继续求购",
+        "re:已收.*再收", "re:已收.*继续收", "re:继续收.*", "re:再收(一台|一个|一枚)?",
+    ]
+    selling_patterns = [
+        "出售", "甩卖", "明盘", "改邮箱", "带邮箱", "转让", "出闲置", "出自用", "小甩", "清仓",
+        "re:^(出|卖|转)[^租收求借换]", "re:出(一台|一个|自用|闲置)", "re:卖(一台|一个)",
+    ]
+    buying_patterns = [
+        "求购", "想收", "收一个", "收个", "收台", "求一个", "求一台", "蹲一个", "蹲台", "来一台", "来一个",
+        "re:^(收|求|蹲)[^出卖转租]", "re:求(一台|一个)", "re:收(一台|一个|个)",
+    ]
+    done_patterns = [
+        "交易完成", "已完成交易", "已结帖", "结帖", "封贴", "完结",
+    ]
 
-    # 先检查收帖
-    for kw in buying_keywords:
-        if kw in title or kw in combined.split()[:50]:
-            return "buying"
+    # 1. 标题优先：继续交易 > 已完成 > 正常交易
+    if _match_trade_patterns(title_norm, continue_selling_patterns):
+        return "selling"
+    if _match_trade_patterns(title_norm, continue_buying_patterns):
+        return "buying"
+    if _match_trade_patterns(title_norm, sold_patterns):
+        return "sold"
+    if _match_trade_patterns(title_norm, bought_patterns):
+        return "bought"
+    if _match_trade_patterns(title_norm, selling_patterns):
+        return "selling"
+    if _match_trade_patterns(title_norm, buying_patterns):
+        return "buying"
+    if _match_trade_patterns(title_norm, done_patterns):
+        return "done"
 
-    # 检查出帖
-    for kw in selling_keywords:
-        if kw in title:
-            return "selling"
+    # 2. 正文补充判断：只认相对明确的表达，避免正文聊天误判
+    if _match_trade_patterns(body_norm, continue_selling_patterns):
+        return "selling"
+    if _match_trade_patterns(body_norm, continue_buying_patterns):
+        return "buying"
+    if _match_trade_patterns(body_norm, sold_patterns):
+        return "sold"
+    if _match_trade_patterns(body_norm, bought_patterns):
+        return "bought"
+    if _match_trade_patterns(body_norm, ["求购", "继续收", "想收", "收一个", "收台", "求一台"]):
+        return "buying"
+    if _match_trade_patterns(body_norm, ["出售", "继续出", "转让", "出闲置", "甩卖", "明盘"]):
+        return "selling"
+    if _match_trade_patterns(body_norm, done_patterns):
+        return "done"
 
-    return "unknown"  # 未知默认当出帖处理（帮顶安全）
+    # 3. 最后的轻量兜底：只在标题上做，避免误伤
+    if title_norm.startswith(("收", "求", "蹲")) and not _match_trade_patterns(title_norm, sold_patterns + bought_patterns):
+        return "buying"
+    if title_norm.startswith(("出", "卖", "转")) and not _match_trade_patterns(title_norm, sold_patterns):
+        return "selling"
+
+    return "unknown"
 
 
 def _pick_comment(post_type):
-    """根据帖子类型选合适的评论"""
+    """根据帖子类型选合适的评论；完成态和无法判断时不评论"""
     if post_type == "buying":
         return random.choice(COMMENT_BUYING)
-    else:
-        # selling 和 unknown 都用出帖评论（帮顶安全）
+    if post_type == "selling":
         return random.choice(COMMENT_SELLING)
+    return ""
 
 
 def _wait_for_cloudflare(driver, max_wait=30):
@@ -525,6 +614,9 @@ def selenium_comment(ns_cookie):
                 # 检测帖子类型，选对应评论语
                 post_type = _detect_post_type(driver)
                 input_text = _pick_comment(post_type)
+                if not input_text:
+                    print(f"  帖子类型: {post_type} → 无安全评论模板，跳过")
+                    continue
                 print(f"  帖子类型: {post_type} → 评论: {input_text}")
 
                 editor = WebDriverWait(driver, 20).until(
