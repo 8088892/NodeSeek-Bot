@@ -76,7 +76,7 @@ TG_CHAT_ID = os.getenv("TG_CHAT_ID") or os.getenv("TG_USER_ID", "")
 TG_THREAD_ID = os.getenv("TG_THREAD_ID", "")
 
 # 评论配置
-NS_COMMENT = os.getenv("NS_COMMENT", "true").lower() != "false"
+NS_COMMENT = os.getenv("NS_COMMENT", "false").lower() != "false"
 COMMENT_URL = os.getenv("NS_COMMENT_URL", "") or "https://www.nodeseek.com/categories/trade"
 _delay_min_raw = os.getenv("NS_DELAY_MIN", "0") or "0"
 _delay_max_raw = os.getenv("NS_DELAY_MAX", "10") or "10"

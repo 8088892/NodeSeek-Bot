@@ -98,7 +98,7 @@ NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `NS_COMMENT` | `true` | `false` 关闭评论 |
+| `NS_COMMENT` | `false` | `false` 关闭评论 |
 | `NS_COMMENT_URL` | 交易区 | 自定义评论区域 URL |
 | `NS_DELAY_MIN` | `0` | 运行前随机延迟下限（分钟） |
 | `NS_DELAY_MAX` | `0` | 运行前随机延迟上限（分钟） |
