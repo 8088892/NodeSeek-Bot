@@ -811,6 +811,7 @@ if __name__ == "__main__":
     # ── 逐账号执行：Cookie 优先，过期则用密码刷新 ──
     all_results = []
     cookies_updated = False
+    cookie_refresh_events = []
     new_cookie_list = []
 
     # 确定要处理的总账号数 = max(密码账号数, 已存cookie数)
@@ -828,8 +829,9 @@ if __name__ == "__main__":
         print(f"账号: {display}")
         print(f"{'='*50}")
 
-        result = {"name": display, "sign": "failed", "reward": "0", "comments": 0, "error": None}
+        result = {"name": display, "sign": "failed", "reward": "0", "comments": 0, "error": None, "cookie_refreshed": False, "refresh_reason": ""}
         active_cookie = ""
+        cookie_invalid_msg = ""
 
         # 1. 先尝试用已保存的 Cookie 签到
         if saved_cookie:
@@ -844,6 +846,7 @@ if __name__ == "__main__":
                     result["reward"] = re.search(r"(\d+)", msg).group(1) if re.search(r"(\d+)", msg) else "0"
                 print(f"Cookie 签到: {status} — {msg}")
             else:
+                cookie_invalid_msg = msg
                 print(f"Cookie 失效: {msg}")
 
         # 2. Cookie 无效或无Cookie，尝试密码登录
@@ -854,6 +857,12 @@ if __name__ == "__main__":
                 print("登录成功，使用新 Cookie 签到...")
                 active_cookie = new_cookie
                 cookies_updated = True
+                refresh_reason = "Cookie 失效" if saved_cookie else "无已保存 Cookie"
+                if cookie_invalid_msg:
+                    refresh_reason = f"{refresh_reason}: {cookie_invalid_msg}"
+                result["cookie_refreshed"] = True
+                result["refresh_reason"] = refresh_reason
+                cookie_refresh_events.append(f"⚠️ {display}: {refresh_reason}，已通过账号密码 + 验证码/2FA 重新登录并刷新 Cookie")
                 status, msg = api_sign(new_cookie)
                 if status in ("success", "already"):
                     result["sign"] = status
@@ -893,6 +902,10 @@ if __name__ == "__main__":
         all_cookies_new = "|".join([c for c in new_cookie_list if c.strip()])
         save_cookie("NS_COOKIE", all_cookies_new)
 
+    # ── Cookie 刷新提醒 ──
+    if cookie_refresh_events:
+        tg_send("<b>NodeSeek Cookie 已刷新</b>", "\n".join(cookie_refresh_events))
+
     # ── 汇总通知 ──
     beijing_time = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -907,7 +920,8 @@ if __name__ == "__main__":
             stats_str = ""
             if r.get("stats") and r["stats"]["days"] > 0:
                 stats_str = f" | 近30天 {r['stats']['days']}天 {r['stats']['total']}🍗"
-            lines.append(f"  {sign_icon} {name}: {reward_str} | 💬{r['comments']}条{stats_str}")
+            refresh_str = " | ⚠️Cookie已刷新" if r.get("cookie_refreshed") else ""
+            lines.append(f"  {sign_icon} {name}: {reward_str} | 💬{r['comments']}条{stats_str}{refresh_str}")
 
     report_body = f"""━━━━━━━━━━━━━━━
 {chr(10).join(lines)}
