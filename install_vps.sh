@@ -85,12 +85,19 @@ install_python_deps() {
 }
 
 write_env() {
+  local has_existing_env="false"
+  [ -f "$INSTALL_DIR/.env" ] && has_existing_env="true"
   load_existing_env
   echo
   echo "开始填写 NodeSeek Bot 配置。已有 .env 时直接回车会保留原值。"
   echo
 
-  ask NS_USER "NodeSeek 用户名 USER" "${USER:-}"
+  local default_ns_user=""
+  if [ "$has_existing_env" = "true" ]; then
+    default_ns_user="${USER:-}"
+  fi
+
+  ask NS_USER "NodeSeek 用户名 USER" "$default_ns_user"
   ask NS_PASS "NodeSeek 密码 PASS" "${PASS:-}" true
   ask NS_COOKIE_VALUE "NS_COOKIE，可先留空，或粘贴当前 Cookie" "${NS_COOKIE:-}" true
 
@@ -145,6 +152,7 @@ write_runner() {
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
+export NS_ENV_FILE="$(pwd)/.env"
 set -a
 . ./.env
 set +a
@@ -173,7 +181,7 @@ install_cron() {
     local hh mm
     hh="${t%%:*}"
     mm="${t##*:}"
-    if ! [[ "$hh" =~ ^[0-9]{1,2}$ && "$mm" =~ ^[0-9]{1,2}$ ]]; then
+    if ! [[ "$hh" =~ ^[0-9]{1,2}$ && "$mm" =~ ^[0-9]{1,2}$ ]] || [ "$hh" -gt 23 ] || [ "$mm" -gt 59 ]; then
       echo "跳过非法时间: $t"
       continue
     fi

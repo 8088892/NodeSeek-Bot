@@ -147,11 +147,52 @@ def save_cookie_to_github(var_name, cookie):
     return False
 
 
+def save_cookie_to_local_env(var_name, cookie):
+    """本地/VPS 运行时把 Cookie 写回 .env，避免下次继续使用旧 Cookie"""
+    env_path = os.environ.get("NS_ENV_FILE", ".env")
+    if not os.path.exists(env_path):
+        print(f"本地 .env 不存在，跳过 {var_name} 保存: {env_path}")
+        return False
+
+    def quote_env_value(value):
+        value = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{value}"'
+
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        prefix = f"{var_name}="
+        new_line = f"{var_name}={quote_env_value(cookie)}\n"
+        updated = False
+        for idx, line in enumerate(lines):
+            if line.startswith(prefix):
+                lines[idx] = new_line
+                updated = True
+                break
+        if not updated:
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+            lines.append(new_line)
+
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+        try:
+            os.chmod(env_path, 0o600)
+        except Exception:
+            pass
+        print(f"本地 .env: {var_name} 更新成功")
+        return True
+    except Exception as e:
+        print(f"本地 .env: {var_name} 更新失败: {e}")
+        return False
+
+
 def save_cookie(var_name, cookie):
     """根据环境保存 Cookie"""
     if detect_environment() == "github":
         return save_cookie_to_github(var_name, cookie)
-    return False
+    return save_cookie_to_local_env(var_name, cookie)
 
 
 # ── API 签到 ───────────────────────────────────────────
