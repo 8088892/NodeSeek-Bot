@@ -127,126 +127,108 @@ NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，
 
 ## 🖥️ VPS 一键部署
 
-如果不想用 GitHub Actions 的随机出口 IP，可以放到自己的 VPS 跑：
+适合不想用 GitHub Actions 随机 IP 的情况。VPS 负责日常签到；Cookie 失效时，再手动跑一次验证脚本。
+
+### 首次安装
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/install_vps.sh)
 ```
 
-脚本会自动完成：
+安装脚本会做这些：
 
 - 安装系统依赖
-- clone / 更新仓库到 `/opt/NodeSeek-Bot`
-- 创建 Python venv 并安装依赖
-- 交互式生成 `.env`
-- 创建 `run.sh`
-- 写入 cron 定时任务
+- 下载仓库到 `/opt/NodeSeek-Bot`
+- 创建 Python 虚拟环境
+- 生成 `.env` 配置文件
+- 创建 `/opt/NodeSeek-Bot/run.sh`
+- 写入每天 `00:05` 和 `12:05` 的 cron 定时任务
 
-常用命令：
+### 日常命令
 
-```bash
+手动跑一次签到：
+
+```text
 /opt/NodeSeek-Bot/run.sh
 ```
 
-手动跑一次，适合刚填完变量后测试。
+Cookie 失效时，手机手动验证并自动写回 Cookie：
 
-```bash
+```text
+bash /opt/NodeSeek-Bot/manual_login.sh
+```
+
+查看日志：
+
+```text
 tail -f /opt/NodeSeek-Bot/run.log
 ```
 
-查看 cron 定时运行日志；手动跑时输出会直接显示在终端。
+重新配置变量：
 
-```bash
-nano /opt/NodeSeek-Bot/.env
-```
-
-手动修改变量。
-
-```bash
-crontab -l
-```
-
-查看当前定时任务。
-
-```bash
+```text
 bash /opt/NodeSeek-Bot/install_vps.sh
 ```
 
-重新配置变量；已有 `.env` 时直接回车会保留旧值。
+只更新代码和依赖，不改 `.env` / cron：
 
-```bash
+```text
 bash /opt/NodeSeek-Bot/install_vps.sh --update
 ```
 
-只更新代码和 Python 依赖，不修改 `.env` / cron。
+远程一键更新：
 
-也可以远程一键更新：
-
-```bash
+```text
 bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/install_vps.sh) --update
 ```
 
-如果遇到 Python 3.12+ / 3.14 环境下 `No module named distutils`，重新运行上面的更新命令即可，脚本会自动升级 `setuptools wheel`。
+### 变量怎么填
 
-### VPS 变量怎么填
+| 变量 | 怎么填 |
+|------|--------|
+| `USER` | NodeSeek 用户名 |
+| `PASS` | NodeSeek 密码 |
+| `NS_COOKIE` | 可以留空；如果你已经有浏览器 Cookie，可以粘贴，最稳 |
+| `SOLVER_TYPE` | 默认 `yescaptcha` |
+| `CLIENTT_KEY` | YesCaptcha 的 Client Key |
+| `API_BASE_URL` | 默认 `https://api.yescaptcha.com` |
+| `NS_TOTP_SECRET` | 没开 2FA 就留空；开了就填二维码背后的字母 secret，不是 6 位数字 |
+| `NS_TOTP_FIELD` | 不懂就回车，默认 `otp` |
+| `NS_TOTP_FIELDS` | 不懂就回车 |
+| `TG_BOT_TOKEN` | Telegram Bot Token，用来推送通知和手动验证链接 |
+| `TG_CHAT_ID` | Telegram 接收通知的 chat id |
+| `NS_COMMENT` | 默认 `false`，也就是不自动评论 |
+| `RUN_TIMES` | 默认 `00:05,12:05` |
 
-| 变量 | 必填 | 说明 |
-|------|------|------|
-| `USER` | 是 | NodeSeek 用户名 |
-| `PASS` | 是 | NodeSeek 密码 |
-| `NS_COOKIE` | 否 | 浏览器里复制的 NodeSeek Cookie；留空时会尝试账号密码登录 |
-| `SOLVER_TYPE` | 是 | 验证码平台，默认 `yescaptcha` |
-| `CLIENTT_KEY` | 是 | YesCaptcha 的 Client Key |
-| `API_BASE_URL` | 是 | 默认 `https://api.yescaptcha.com` |
-| `NS_TOTP_SECRET` | 否 | 两步验证密钥；没有开启 2FA 就留空 |
-| `NS_TOTP_FIELD` | 否 | 2FA 字段名，默认 `otp`，不懂就回车 |
-| `NS_TOTP_FIELDS` | 否 | 2FA 候选字段，不懂就回车 |
-| `TG_BOT_TOKEN` | 否 | Telegram Bot Token，用于通知 |
-| `TG_CHAT_ID` | 否 | Telegram 接收通知的 chat id |
-| `NS_COMMENT` | 否 | 是否自动评论，默认 `false` |
-| `RUN_TIMES` | 否 | 每天运行时间，默认 `00:05,12:05` |
+### Cookie 失效怎么办
+
+日常 cron 只跑：
+
+```text
+/opt/NodeSeek-Bot/run.sh
+```
+
+如果 Cookie 失效，需要你手动跑：
+
+```text
+bash /opt/NodeSeek-Bot/manual_login.sh
+```
+
+这个脚本会：
+
+1. 临时启动 VPS 上的 Chromium + noVNC
+2. 终端和 Telegram 发一个临时浏览器链接和密码
+3. 你用手机打开链接，在 VPS 浏览器里手动登录 NodeSeek
+4. 回到 VPS 终端按 Enter
+5. 脚本自动提取 Cookie，写回 `/opt/NodeSeek-Bot/.env`
+6. 自动关闭临时浏览器入口
 
 说明：
 
-- 默认不强制 2FA：`NS_TOTP_SECRET` 可以留空。
-- 如果开启两步验证，`NS_TOTP_SECRET` 填二维码背后的 TOTP secret 字母密钥，不是当前 6 位数字。
-- 默认关闭评论：`NS_COMMENT=false`。
-- 如果 Cookie 过期并且账号密码登录成功，VPS 本地会自动把新 Cookie 写回 `.env`。
-
-
-## 🧩 VPS 手动验证登录（和 GitHub Actions 隔离）
-
-NodeSeek 新版登录页的 Turnstile 验证可能不会在 GitHub Actions / 普通 requests 里自动通过。为避免云端随机 IP 反复触发风控，仓库提供了一个**仅 VPS 手动执行**的辅助脚本：
-
-```bash
-bash /opt/NodeSeek-Bot/manual_login.sh
-```
-
-它和主签到脚本是隔离的：
-
-- GitHub Actions 不会调用 `manual_login.sh`
-- cron 定时任务不会调用 `manual_login.sh`
-- 主签到仍然运行 `nodeseek_bot.py`
-- `manual_login.sh` 只在你手动执行时临时启动远程浏览器
-
-流程：
-
-1. VPS 临时启动 Chromium + noVNC
-2. 终端和 Telegram 推送一个临时浏览器链接和密码
-3. 你用手机打开链接，在 VPS 浏览器里手动完成 NodeSeek 登录 / Turnstile
-4. 回到 VPS 终端按 Enter
-5. 脚本提取 NodeSeek Cookie，写回 `/opt/NodeSeek-Bot/.env`
-6. 自动关闭临时 noVNC 入口
-
-常用命令：
-
-```bash
-bash /opt/NodeSeek-Bot/manual_login.sh
-```
-
-如果手机不好输入账号密码，脚本会尝试从 `.env` 里的 `USER` / `PASS` 自动填入，之后你只需要手动验证/点击登录。
-
-> 这个脚本不是绕过 Cloudflare；它只是让你本人在 VPS 浏览器里完成验证，然后保存 Cookie 供后续自动签到使用。
+- `manual_login.sh` 只在 VPS 手动执行
+- GitHub Actions 不会调用它
+- cron 不会调用它
+- 它不是绕过 Cloudflare，只是让你本人在 VPS 浏览器里完成验证
 
 ## 📱 多平台通知（可选）
 

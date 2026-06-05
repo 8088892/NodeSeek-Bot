@@ -90,8 +90,12 @@ write_env() {
   [ -f "$INSTALL_DIR/.env" ] && has_existing_env="true"
   load_existing_env
   echo
-  echo "开始填写 NodeSeek Bot 配置。已有 .env 时直接回车会保留原值。"
-  echo "提示：NS_COOKIE 和 NS_TOTP_SECRET 都可以留空；两步验证不是强制配置。"
+  echo "开始配置 NodeSeek Bot。已有配置时，直接回车会保留旧值。"
+  echo
+  echo "填写建议："
+  echo "- 只想先跑签到：USER / PASS / TG 信息填好即可，NS_COMMENT 保持 false。"
+  echo "- 已有浏览器 Cookie：可以粘贴到 NS_COOKIE，后续更稳。"
+  echo "- 没开两步验证：NS_TOTP_SECRET 直接回车留空。"
   echo
 
   local default_ns_user=""
@@ -99,24 +103,24 @@ write_env() {
     default_ns_user="${USER:-}"
   fi
 
-  ask NS_USER "NodeSeek 用户名 USER" "$default_ns_user"
-  ask NS_PASS "NodeSeek 密码 PASS" "${PASS:-}" true
-  ask NS_COOKIE_VALUE "NS_COOKIE，可先留空，或粘贴当前 Cookie" "${NS_COOKIE:-}" true
+  ask NS_USER "NodeSeek 用户名" "$default_ns_user"
+  ask NS_PASS "NodeSeek 密码" "${PASS:-}" true
+  ask NS_COOKIE_VALUE "NodeSeek Cookie，可留空" "${NS_COOKIE:-}" true
 
-  ask SOLVER_TYPE_VALUE "验证码平台 SOLVER_TYPE" "${SOLVER_TYPE:-yescaptcha}"
-  ask API_BASE_URL_VALUE "验证码 API_BASE_URL" "${API_BASE_URL:-https://api.yescaptcha.com}"
-  ask CLIENTT_KEY_VALUE "验证码 CLIENTT_KEY" "${CLIENTT_KEY:-}" true
+  ask SOLVER_TYPE_VALUE "验证码平台，默认 yescaptcha" "${SOLVER_TYPE:-yescaptcha}"
+  ask API_BASE_URL_VALUE "验证码 API 地址" "${API_BASE_URL:-https://api.yescaptcha.com}"
+  ask CLIENTT_KEY_VALUE "YesCaptcha Client Key" "${CLIENTT_KEY:-}" true
 
-  ask NS_TOTP_SECRET_VALUE "两步验证 NS_TOTP_SECRET，填二维码背后的字母 secret，不是6位数字；没有就留空" "${NS_TOTP_SECRET:-}" true
-  ask NS_TOTP_FIELD_VALUE "2FA 字段 NS_TOTP_FIELD，不懂就回车" "${NS_TOTP_FIELD:-otp}"
-  ask NS_TOTP_FIELDS_VALUE "2FA 候选字段 NS_TOTP_FIELDS，不懂就回车" "${NS_TOTP_FIELDS:-otp,code,totp,twoFactorCode,two_factor_code,mfaCode}"
+  ask NS_TOTP_SECRET_VALUE "两步验证密钥，可留空；不是 6 位数字" "${NS_TOTP_SECRET:-}" true
+  ask NS_TOTP_FIELD_VALUE "2FA 字段名，不懂就回车" "${NS_TOTP_FIELD:-otp}"
+  ask NS_TOTP_FIELDS_VALUE "2FA 候选字段，不懂就回车" "${NS_TOTP_FIELDS:-otp,code,totp,twoFactorCode,two_factor_code,mfaCode}"
 
   ask TG_BOT_TOKEN_VALUE "Telegram Bot Token" "${TG_BOT_TOKEN:-}" true
   ask TG_CHAT_ID_VALUE "Telegram Chat ID" "${TG_CHAT_ID:-${TG_USER_ID:-}}"
 
-  ask NS_COMMENT_VALUE "是否开启自动评论 NS_COMMENT，建议先 false" "${NS_COMMENT:-false}"
+  ask NS_COMMENT_VALUE "是否开启自动评论，建议 false" "${NS_COMMENT:-false}"
   ask NS_COMMENT_URL_VALUE "评论区 URL" "${NS_COMMENT_URL:-https://www.nodeseek.com/categories/trade}"
-  ask RUN_TIMES_VALUE "每天运行时间，逗号分隔，24小时制" "00:05,12:05"
+  ask RUN_TIMES_VALUE "每天运行时间，逗号分隔" "00:05,12:05"
 
   cat > "$INSTALL_DIR/.env" <<EOF
 USER=$(quote_env "$NS_USER")
@@ -235,24 +239,25 @@ main() {
       ;;
   esac
 
-  echo "目录: $INSTALL_DIR"
-  echo "配置: $INSTALL_DIR/.env"
-  echo "日志: $INSTALL_DIR/run.log"
+  echo "安装完成。常用命令："
   echo
-  echo "手动测试命令："
+  echo "手动跑一次签到："
   echo "  $INSTALL_DIR/run.sh"
   echo
-  echo "看日志："
+  echo "Cookie 失效时，手机手动验证并自动写回 Cookie："
+  echo "  bash $INSTALL_DIR/manual_login.sh"
+  echo
+  echo "查看运行日志："
   echo "  tail -f $INSTALL_DIR/run.log"
   echo
   echo "重新配置变量："
   echo "  bash $INSTALL_DIR/install_vps.sh"
   echo
-  echo "只更新代码和依赖："
+  echo "只更新代码和依赖，不改变量/定时任务："
   echo "  bash $INSTALL_DIR/install_vps.sh --update"
   echo
-  echo "手动浏览器验证并写回 Cookie（仅 VPS 手动执行，不会被 GitHub Actions 调用）："
-  echo "  bash $INSTALL_DIR/manual_login.sh"
+  echo "安装目录: $INSTALL_DIR"
+  echo "配置文件: $INSTALL_DIR/.env"
   echo
   echo "当前定时任务："
   crontab -l | grep 'NodeSeek-Bot' || true
