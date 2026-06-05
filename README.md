@@ -146,14 +146,72 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/ins
 
 ```bash
 /opt/NodeSeek-Bot/run.sh
+```
+
+手动跑一次，适合刚填完变量后测试。
+
+```bash
 tail -f /opt/NodeSeek-Bot/run.log
+```
+
+查看 cron 定时运行日志；手动跑时输出会直接显示在终端。
+
+```bash
 nano /opt/NodeSeek-Bot/.env
+```
+
+手动修改变量。
+
+```bash
 crontab -l
 ```
 
-重新运行一键脚本会保留已有 `.env`，回车即可沿用旧值。
+查看当前定时任务。
 
-> 开启两步验证时，`NS_TOTP_SECRET` 填二维码背后的 TOTP secret 字母密钥，不是当前 6 位数字。
+```bash
+bash /opt/NodeSeek-Bot/install_vps.sh
+```
+
+重新配置变量；已有 `.env` 时直接回车会保留旧值。
+
+```bash
+bash /opt/NodeSeek-Bot/install_vps.sh --update
+```
+
+只更新代码和 Python 依赖，不修改 `.env` / cron。
+
+也可以远程一键更新：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/install_vps.sh) --update
+```
+
+如果遇到 Python 3.12+ / 3.14 环境下 `No module named distutils`，重新运行上面的更新命令即可，脚本会自动升级 `setuptools wheel`。
+
+### VPS 变量怎么填
+
+| 变量 | 必填 | 说明 |
+|------|------|------|
+| `USER` | 是 | NodeSeek 用户名 |
+| `PASS` | 是 | NodeSeek 密码 |
+| `NS_COOKIE` | 否 | 浏览器里复制的 NodeSeek Cookie；留空时会尝试账号密码登录 |
+| `SOLVER_TYPE` | 是 | 验证码平台，默认 `yescaptcha` |
+| `CLIENTT_KEY` | 是 | YesCaptcha 的 Client Key |
+| `API_BASE_URL` | 是 | 默认 `https://api.yescaptcha.com` |
+| `NS_TOTP_SECRET` | 否 | 两步验证密钥；没有开启 2FA 就留空 |
+| `NS_TOTP_FIELD` | 否 | 2FA 字段名，默认 `otp`，不懂就回车 |
+| `NS_TOTP_FIELDS` | 否 | 2FA 候选字段，不懂就回车 |
+| `TG_BOT_TOKEN` | 否 | Telegram Bot Token，用于通知 |
+| `TG_CHAT_ID` | 否 | Telegram 接收通知的 chat id |
+| `NS_COMMENT` | 否 | 是否自动评论，默认 `false` |
+| `RUN_TIMES` | 否 | 每天运行时间，默认 `00:05,12:05` |
+
+说明：
+
+- 默认不强制 2FA：`NS_TOTP_SECRET` 可以留空。
+- 如果开启两步验证，`NS_TOTP_SECRET` 填二维码背后的 TOTP secret 字母密钥，不是当前 6 位数字。
+- 默认关闭评论：`NS_COMMENT=false`。
+- 如果 Cookie 过期并且账号密码登录成功，VPS 本地会自动把新 Cookie 写回 `.env`。
 
 ## 📱 多平台通知（可选）
 

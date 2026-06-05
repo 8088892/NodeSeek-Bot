@@ -5,6 +5,7 @@ REPO_URL="${REPO_URL:-https://github.com/vmenzo/NodeSeek-Bot.git}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/NodeSeek-Bot}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 CRON_TIMEZONE="${CRON_TIMEZONE:-Asia/Shanghai}"
+MODE="${1:-install}"
 
 need_root() {
   if [ "$(id -u)" -ne 0 ]; then
@@ -80,17 +81,25 @@ install_repo() {
 install_python_deps() {
   cd "$INSTALL_DIR"
   "$PYTHON_BIN" -m venv venv
-  ./venv/bin/pip install --upgrade pip
+  ./venv/bin/pip install --upgrade pip setuptools wheel
   ./venv/bin/pip install -r requirements.txt
 }
 
 write_env() {
+  local has_existing_env="false"
+  [ -f "$INSTALL_DIR/.env" ] && has_existing_env="true"
   load_existing_env
   echo
   echo "开始填写 NodeSeek Bot 配置。已有 .env 时直接回车会保留原值。"
+  echo "提示：NS_COOKIE 和 NS_TOTP_SECRET 都可以留空；两步验证不是强制配置。"
   echo
 
-  ask NS_USER "NodeSeek 用户名 USER" "${USER:-}"
+  local default_ns_user=""
+  if [ "$has_existing_env" = "true" ]; then
+    default_ns_user="${USER:-}"
+  fi
+
+  ask NS_USER "NodeSeek 用户名 USER" "$default_ns_user"
   ask NS_PASS "NodeSeek 密码 PASS" "${PASS:-}" true
   ask NS_COOKIE_VALUE "NS_COOKIE，可先留空，或粘贴当前 Cookie" "${NS_COOKIE:-}" true
 
@@ -145,6 +154,7 @@ write_runner() {
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
+export NS_ENV_FILE="$(pwd)/.env"
 set -a
 . ./.env
 set +a
@@ -173,7 +183,7 @@ install_cron() {
     local hh mm
     hh="${t%%:*}"
     mm="${t##*:}"
-    if ! [[ "$hh" =~ ^[0-9]{1,2}$ && "$mm" =~ ^[0-9]{1,2}$ ]]; then
+    if ! [[ "$hh" =~ ^[0-9]{1,2}$ && "$mm" =~ ^[0-9]{1,2}$ ]] || [ "$hh" -gt 23 ] || [ "$mm" -gt 59 ]; then
       echo "跳过非法时间: $t"
       continue
     fi
@@ -183,17 +193,48 @@ install_cron() {
   rm -f "$tmp"
 }
 
-main() {
-  need_root
-  install_packages
-  install_repo
-  install_python_deps
-  write_env
-  write_runner
-  install_cron
+show_usage() {
+  cat <<EOF
+用法：
+  bash install_vps.sh              安装/重配，交互填写变量并写入 cron
+  bash install_vps.sh --update     仅更新代码和 Python 依赖，不修改 .env/cron
+  bash install_vps.sh --help       显示帮助
+EOF
+}
 
-  echo
-  echo "安装完成。"
+main() {
+  case "$MODE" in
+    install|--install)
+      need_root
+      install_packages
+      install_repo
+      install_python_deps
+      write_env
+      write_runner
+      install_cron
+      echo
+      echo "安装完成。"
+      ;;
+    update|--update)
+      need_root
+      install_packages
+      install_repo
+      install_python_deps
+      write_runner
+      echo
+      echo "更新完成。未修改 .env 和 cron。"
+      ;;
+    help|-h|--help)
+      show_usage
+      exit 0
+      ;;
+    *)
+      echo "未知参数: $MODE"
+      show_usage
+      exit 1
+      ;;
+  esac
+
   echo "目录: $INSTALL_DIR"
   echo "配置: $INSTALL_DIR/.env"
   echo "日志: $INSTALL_DIR/run.log"
@@ -203,6 +244,12 @@ main() {
   echo
   echo "看日志："
   echo "  tail -f $INSTALL_DIR/run.log"
+  echo
+  echo "重新配置变量："
+  echo "  bash $INSTALL_DIR/install_vps.sh"
+  echo
+  echo "只更新代码和依赖："
+  echo "  bash $INSTALL_DIR/install_vps.sh --update"
   echo
   echo "当前定时任务："
   crontab -l | grep 'NodeSeek-Bot' || true
