@@ -31,34 +31,32 @@ except ImportError:
 # ── 随机评论语料 ──────────────────────────────────────
 # 出帖（卖东西）：尽量短、自然，像路人顺手回一嘴
 COMMENT_SELLING = [
-    "帮顶一下，价格看着还挺实在",
-    "路过帮顶，祝早点出掉",
-    "看了下，感觉还不错，帮顶",
-    "这帖看着挺正常，顺手帮顶",
-    "价格还行，帮你顶一下",
-    "配置和描述都挺清楚，帮顶",
-    "先帮顶一手，祝顺利出",
-    "有需要的可以看看，顺手顶下",
-    "帮顶，感觉应该挺快就能出",
-    "看着还可以，给你顶一下",
-    "路过支持一下，祝交易顺利",
-    "顺手帮顶，等个有缘人",
-    "这个价位看着还行，帮顶一下",
-    "帮顶，蹲个刚好需要的人",
+    "帮顶，祝早出",
+    "路过帮顶",
+    "价格不错，帮顶",
+    "顺手顶一下",
+    "祝顺利出",
+    "帮顶支持",
+    "看着可以，帮顶",
+    "顶一下",
+    "祝交易顺利",
+    "蹲个有缘人",
+    "帮顶，早出",
+    "路过支持下",
 ]
 
 # 收帖（买东西）：尽量像真人，不要太像统一模板
 COMMENT_BUYING = [
-    "帮顶一下，祝早收到",
-    "路过帮顶，祝你收到合适的",
-    "先帮你顶顶，蹲个好价",
-    "祝早收，感觉会有人出的",
-    "帮顶，等等看应该有楼下",
-    "顺手顶一下，祝收到心仪的",
-    "帮你顶顶，祝顺利收到",
-    "路过支持一下，祝早收",
-    "先帮顶，等个合适的来",
-    "帮顶一手，希望你早点蹲到",
+    "帮顶，祝早收",
+    "路过帮顶",
+    "祝早收到",
+    "顺手顶一下",
+    "蹲个好价",
+    "帮顶支持",
+    "祝顺利收到",
+    "顶一下",
+    "路过支持下",
+    "祝收到合适的",
 ]
 
 # 状态已完成的帖子不评论
@@ -407,7 +405,9 @@ def _detect_post_type(driver):
     if _match_trade_patterns(title_norm, done_patterns):
         return "done"
 
-    # 2. 正文补充判断：只认相对明确的表达，避免正文聊天误判
+    # 2. 正文补充判断：只认非常明确的表达，避免把聊天内容误判成交易状态
+    if _match_trade_patterns(body_norm, done_patterns):
+        return "done"
     if _match_trade_patterns(body_norm, continue_selling_patterns):
         return "selling"
     if _match_trade_patterns(body_norm, continue_buying_patterns):
@@ -416,17 +416,26 @@ def _detect_post_type(driver):
         return "sold"
     if _match_trade_patterns(body_norm, bought_patterns):
         return "bought"
-    if _match_trade_patterns(body_norm, ["求购", "继续收", "想收", "收一个", "收台", "求一台"]):
-        return "buying"
-    if _match_trade_patterns(body_norm, ["出售", "继续出", "转让", "出闲置", "甩卖", "明盘"]):
-        return "selling"
-    if _match_trade_patterns(body_norm, done_patterns):
-        return "done"
 
-    # 3. 最后的轻量兜底：只在标题上做，避免误伤
-    if title_norm.startswith(("收", "求", "蹲")) and not _match_trade_patterns(title_norm, sold_patterns + bought_patterns):
+    clear_buying_body_patterns = [
+        "求购", "想收", "收一个", "收个", "收台", "求一台", "求一个",
+        "re:(求购|想收|收个|收一台|求一台).{0,18}(预算|价格|明盘|配置|账号|机器|服务器|vps)",
+    ]
+    clear_selling_body_patterns = [
+        "出售", "转让", "出闲置", "甩卖", "明盘出", "打包出",
+        "re:(出售|转让|出闲置|打包出).{0,18}(明盘|价格|配置|账号|机器|服务器|vps)",
+    ]
+    if _match_trade_patterns(body_norm, clear_buying_body_patterns):
         return "buying"
-    if title_norm.startswith(("出", "卖", "转")) and not _match_trade_patterns(title_norm, sold_patterns):
+    if _match_trade_patterns(body_norm, clear_selling_body_patterns):
+        return "selling"
+
+    # 3. 标题兜底也收紧：必须是明确交易短语，不再只凭“收/出/卖”单字判断
+    strict_buying_title_patterns = ["求购", "想收", "收一个", "收个", "收台", "求一台", "求一个", "蹲一个", "蹲台"]
+    strict_selling_title_patterns = ["出售", "转让", "出闲置", "出自用", "甩卖", "明盘出", "打包出"]
+    if _match_trade_patterns(title_norm, strict_buying_title_patterns) and not _match_trade_patterns(title_norm, sold_patterns + bought_patterns):
+        return "buying"
+    if _match_trade_patterns(title_norm, strict_selling_title_patterns) and not _match_trade_patterns(title_norm, sold_patterns):
         return "selling"
 
     return "unknown"
@@ -443,19 +452,19 @@ def _pick_comment(post_type, title_text=""):
 
     title_norm = _normalize_trade_text(title_text)
 
-    # unknown 时适度放宽：只看标题里的弱交易信号，不看正文，避免误伤
-    weak_buying_markers = ["收", "求", "蹲", "来一个", "来一台"]
-    weak_selling_markers = ["出", "卖", "转", "明盘", "小甩"]
+    # unknown 时不再兜底评论，避免因为标题里单个“收/出/卖”误伤非交易帖
     skip_markers = ["已出", "已售", "已收", "已求到", "结帖", "完结", "封贴"]
+    strict_buying_markers = ["求购", "想收", "收一个", "收个", "收台", "求一台", "求一个", "蹲一个", "蹲台"]
+    strict_selling_markers = ["出售", "转让", "出闲置", "出自用", "甩卖", "明盘出", "打包出"]
 
     if any(marker in title_norm for marker in skip_markers):
         return ""
-    if any(marker in title_norm for marker in weak_buying_markers):
+    if any(marker in title_norm for marker in strict_buying_markers):
         return random.choice(COMMENT_BUYING)
-    if any(marker in title_norm for marker in weak_selling_markers):
+    if any(marker in title_norm for marker in strict_selling_markers):
         return random.choice(COMMENT_SELLING)
 
-    return random.choice(COMMENT_SELLING)
+    return ""
 
 
 def _wait_for_cloudflare(driver, max_wait=30):
