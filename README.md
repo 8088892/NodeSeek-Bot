@@ -118,8 +118,6 @@ NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，
 
 > 如果 NodeSeek 开启了两步验证，密码登录刷新 Cookie 需要额外配置 `NS_TOTP_SECRET`。注意这里填的是 TOTP 密钥/secret，不是当前 6 位动态验证码；脚本会运行时自动生成 6 位码。
 
-> 当前 NodeSeek 登录接口有变动，VPS 部署默认 `NS_ALLOW_PASSWORD_LOGIN=false`，避免 Cookie 失效时反复撞账号密码登录。建议优先使用 `NS_COOKIE`。
-
 ### 6️⃣ 验证运行
 
 进入 **Actions** 标签 → 选择 **NodeSeek 签到+评论** → **Run workflow** → 点绿色按钮手动触发一次。
@@ -265,7 +263,6 @@ DD_BOT_SECRET: ${{ secrets.DD_BOT_SECRET }}
 | `USER` `PASS` | 主账号密码 | Secrets |
 | `USER1~5` `PASS1~5` | 额外账号 | Secrets |
 | `NS_COOKIE` | Cookie（自动管理） | Variables |
-| `NS_ALLOW_PASSWORD_LOGIN` | Cookie 失效后是否允许账号密码登录，建议 `false` | Secrets |
 | `SOLVER_TYPE` | 验证码平台 | Secrets |
 | `CLIENTT_KEY` | YesCaptcha Key | Secrets |
 | `API_BASE_URL` | YesCaptcha API | Secrets |
