@@ -5,6 +5,7 @@ REPO_URL="${REPO_URL:-https://github.com/vmenzo/NodeSeek-Bot.git}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/NodeSeek-Bot}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 CRON_TIMEZONE="${CRON_TIMEZONE:-Asia/Shanghai}"
+MODE="${1:-install}"
 
 need_root() {
   if [ "$(id -u)" -ne 0 ]; then
@@ -191,17 +192,50 @@ install_cron() {
   rm -f "$tmp"
 }
 
-main() {
-  need_root
-  install_packages
-  install_repo
-  install_python_deps
-  write_env
-  write_runner
-  install_cron
+show_usage() {
+  cat <<EOF
+用法：
+  bash install_vps.sh              安装/重配，交互填写变量并写入 cron
+  bash install_vps.sh --update     仅更新代码和 Python 依赖，不修改 .env/cron
+  bash install_vps.sh --help       显示帮助
+EOF
+}
 
-  echo
-  echo "安装完成。"
+main() {
+  case "$MODE" in
+    install|--install)
+      need_root
+      install_packages
+      install_repo
+      install_python_deps
+      write_env
+      write_runner
+      install_cron
+
+      echo
+      echo "安装完成。"
+      ;;
+    update|--update)
+      need_root
+      install_packages
+      install_repo
+      install_python_deps
+      write_runner
+
+      echo
+      echo "更新完成。未修改 .env 和 cron。"
+      ;;
+    help|-h|--help)
+      show_usage
+      exit 0
+      ;;
+    *)
+      echo "未知参数: $MODE"
+      show_usage
+      exit 1
+      ;;
+  esac
+
   echo "目录: $INSTALL_DIR"
   echo "配置: $INSTALL_DIR/.env"
   echo "日志: $INSTALL_DIR/run.log"

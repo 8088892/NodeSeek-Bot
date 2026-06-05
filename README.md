@@ -151,6 +151,12 @@ nano /opt/NodeSeek-Bot/.env
 crontab -l
 ```
 
+更新代码和依赖，不修改 `.env` / cron：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/install_vps.sh) --update
+```
+
 重新运行一键脚本会保留已有 `.env`，回车即可沿用旧值。
 
 > 开启两步验证时，`NS_TOTP_SECRET` 填二维码背后的 TOTP secret 字母密钥，不是当前 6 位数字。
