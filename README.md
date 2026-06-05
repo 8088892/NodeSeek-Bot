@@ -124,6 +124,37 @@ NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，
 
 ---
 
+
+## 🖥️ VPS 一键部署
+
+如果不想用 GitHub Actions 的随机出口 IP，可以放到自己的 VPS 跑：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/install_vps.sh)
+```
+
+脚本会自动完成：
+
+- 安装系统依赖
+- clone / 更新仓库到 `/opt/NodeSeek-Bot`
+- 创建 Python venv 并安装依赖
+- 交互式生成 `.env`
+- 创建 `run.sh`
+- 写入 cron 定时任务
+
+常用命令：
+
+```bash
+/opt/NodeSeek-Bot/run.sh
+tail -f /opt/NodeSeek-Bot/run.log
+nano /opt/NodeSeek-Bot/.env
+crontab -l
+```
+
+重新运行一键脚本会保留已有 `.env`，回车即可沿用旧值。
+
+> 开启两步验证时，`NS_TOTP_SECRET` 填二维码背后的 TOTP secret 字母密钥，不是当前 6 位数字。
+
 ## 📱 多平台通知（可选）
 
 `notify.py` 内置了 15+ 种通知渠道，**只需在 `.github/workflows/bot.yml` 的 `env` 段添加对应变量**即可同时启用多条渠道：
