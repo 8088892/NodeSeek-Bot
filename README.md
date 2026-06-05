@@ -80,6 +80,9 @@ NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，
 | `SOLVER_TYPE` | 验证码平台 | `yescaptcha` |
 | `CLIENTT_KEY` | YesCaptcha Client Key | 从后台复制 |
 | `API_BASE_URL` | YesCaptcha API 地址 | `https://api.yescaptcha.com` |
+| `NS_TOTP_SECRET` | NodeSeek 两步验证/TOTP 密钥 | 开启 2FA 时扫码页的 secret，非 6 位数字 |
+| `NS_TOTP_FIELD` | 2FA 登录字段名 | 默认 `otp`，一般不用填 |
+| `NS_TOTP_FIELDS` | 2FA 字段名候选列表 | 默认 `otp,code,totp,twoFactorCode,two_factor_code,mfaCode` |
 
 **GitHub API（Cookie 自动保存需要）：**
 
@@ -110,6 +113,8 @@ NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，
 | `NS_COOKIE` | **不需要手动填**。脚本首次密码登录后自动创建并更新 |
 
 > `NS_COOKIE` 由脚本自动管理：登录成功 → 自动保存 → 下次优先用 Cookie 签到（免验证码）→ Cookie 过期 → 自动密码刷新。
+
+> 如果 NodeSeek 开启了两步验证，密码登录刷新 Cookie 需要额外配置 `NS_TOTP_SECRET`。注意这里填的是 TOTP 密钥/secret，不是当前 6 位动态验证码；脚本会运行时自动生成 6 位码。
 
 ### 6️⃣ 验证运行
 
@@ -220,6 +225,9 @@ DD_BOT_SECRET: ${{ secrets.DD_BOT_SECRET }}
 | `SOLVER_TYPE` | 验证码平台 | Secrets |
 | `CLIENTT_KEY` | YesCaptcha Key | Secrets |
 | `API_BASE_URL` | YesCaptcha API | Secrets |
+| `NS_TOTP_SECRET` | 2FA/TOTP 密钥 | Secrets |
+| `NS_TOTP_FIELD` | 2FA 字段名，默认 `otp` | Secrets |
+| `NS_TOTP_FIELDS` | 2FA 字段名候选列表 | Secrets |
 | `GH_PAT` | GitHub Token | Secrets |
 | `GITHUB_REPOSITORY` | 仓库名（自动注入） | Actions |
 | `TG_BOT_TOKEN` | Telegram Bot | Secrets |

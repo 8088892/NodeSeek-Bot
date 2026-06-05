@@ -67,6 +67,9 @@ SOLVER_TYPE = os.getenv("SOLVER_TYPE", "turnstile")
 API_BASE_URL = os.getenv("API_BASE_URL", "")
 CLIENT_KEY = os.getenv("CLIENTT_KEY", "")
 NS_RANDOM = os.getenv("NS_RANDOM", "true")
+NS_TOTP_SECRET = os.getenv("NS_TOTP_SECRET", "").replace(" ", "")
+NS_TOTP_FIELD = os.getenv("NS_TOTP_FIELD", "otp") or "otp"
+NS_TOTP_FIELDS = [f.strip() for f in os.getenv("NS_TOTP_FIELDS", "otp,code,totp,twoFactorCode,two_factor_code,mfaCode").split(",") if f.strip()]
 
 # 通知配置
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
@@ -181,6 +184,43 @@ def api_sign(ns_cookie):
 
 
 # ── 账号密码登录 + 验证码 ─────────────────────────────
+def get_totp_code():
+    """根据 NS_TOTP_SECRET 生成当前 2FA/TOTP 数字验证码"""
+    if not NS_TOTP_SECRET:
+        return ""
+    try:
+        import pyotp
+        return pyotp.TOTP(NS_TOTP_SECRET).now()
+    except Exception as e:
+        print(f"TOTP 生成失败: {e}")
+        return ""
+
+
+def _login_success_cookie(session):
+    cookies = session.cookies.get_dict()
+    if not cookies:
+        return None
+    return "; ".join([f"{k}={v}" for k, v in cookies.items()])
+
+
+def _need_2fa(resp_json):
+    text = json.dumps(resp_json, ensure_ascii=False).lower()
+    markers = ["2fa", "totp", "otp", "mfa", "twofactor", "two_factor", "二步验证", "两步验证", "双重验证", "动态验证码"]
+    return any(marker in text for marker in markers)
+
+
+def _post_login(session, data, headers):
+    resp = session.post(
+        "https://www.nodeseek.com/api/account/signIn",
+        json=data,
+        headers=headers,
+    )
+    try:
+        return resp.json()
+    except Exception:
+        return {"success": False, "message": resp.text[:300], "status_code": resp.status_code}
+
+
 def session_login(user, password):
     """使用账号密码登录，返回 cookie 字符串"""
     try:
@@ -230,18 +270,42 @@ def session_login(user, password):
         "Content-Type": "application/json",
     }
     try:
-        resp = session.post(
-            "https://www.nodeseek.com/api/account/signIn",
-            json=data,
-            headers=headers,
-        )
-        resp_json = resp.json()
+        totp_code = get_totp_code()
+        candidate_fields = []
+        if NS_TOTP_FIELDS:
+            candidate_fields.extend(NS_TOTP_FIELDS)
+        if NS_TOTP_FIELD not in candidate_fields:
+            candidate_fields.append(NS_TOTP_FIELD)
+
+        # 如果配置了 TOTP，首次登录请求就带上验证码字段；默认字段 otp。
+        login_data = dict(data)
+        if totp_code:
+            login_data[candidate_fields[0]] = totp_code
+            print(f"已生成 2FA/TOTP 验证码，使用字段: {candidate_fields[0]}")
+
+        resp_json = _post_login(session, login_data, headers)
         if resp_json.get("success"):
-            cookies = session.cookies.get_dict()
-            return "; ".join([f"{k}={v}" for k, v in cookies.items()])
-        else:
-            print(f"登录失败: {resp_json.get('message')}")
-            return None
+            return _login_success_cookie(session)
+
+        # 字段名不确定时，可用 NS_TOTP_FIELDS=otp,code,totp,twoFactorCode 批量尝试。
+        if totp_code and _need_2fa(resp_json):
+            tried = {candidate_fields[0]}
+            for field in candidate_fields[1:]:
+                if field in tried:
+                    continue
+                tried.add(field)
+                retry_data = dict(data)
+                retry_data[field] = totp_code
+                print(f"检测到 2FA 要求，重试字段: {field}")
+                resp_json = _post_login(session, retry_data, headers)
+                if resp_json.get("success"):
+                    return _login_success_cookie(session)
+
+        msg = resp_json.get("message") or resp_json
+        if _need_2fa(resp_json) and not totp_code:
+            print("登录需要 2FA/TOTP，但未配置 NS_TOTP_SECRET")
+        print(f"登录失败: {msg}")
+        return None
     except Exception as e:
         print(f"登录异常: {e}")
         return None

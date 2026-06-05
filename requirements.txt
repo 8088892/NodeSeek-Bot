@@ -3,3 +3,4 @@ requests>=2.31.0
 selenium>=4.18.1
 beautifulsoup4>=4.12.3
 undetected-chromedriver>=3.5.5
+pyotp>=2.9.0

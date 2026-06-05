@@ -67,6 +67,9 @@ jobs:
           SOLVER_TYPE: ${{ secrets.SOLVER_TYPE }}
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
           CLIENTT_KEY: ${{ secrets.CLIENTT_KEY }}
+          NS_TOTP_SECRET: ${{ secrets.NS_TOTP_SECRET }}
+          NS_TOTP_FIELD: ${{ secrets.NS_TOTP_FIELD }}
+          NS_TOTP_FIELDS: ${{ secrets.NS_TOTP_FIELDS }}
 
           # ── GitHub API ──
           GH_PAT: ${{ secrets.GH_PAT }}
