@@ -80,8 +80,6 @@ NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，
 | `SOLVER_TYPE` | 验证码平台 | `yescaptcha` |
 | `CLIENTT_KEY` | YesCaptcha Client Key | 从后台复制 |
 | `API_BASE_URL` | YesCaptcha API 地址 | `https://api.yescaptcha.com` |
-| `NS_CAPTCHA_FIELD` | 登录验证码字段名 | 默认 `token`，一般不用填 |
-| `NS_CAPTCHA_FIELDS` | 登录验证码字段名候选列表 | 默认 `token,turnstileToken,cfTurnstileToken,cf-turnstile-response,captchaToken` |
 | `NS_TOTP_SECRET` | NodeSeek 两步验证/TOTP 密钥 | 开启 2FA 时扫码页的 secret，非 6 位数字 |
 | `NS_TOTP_FIELD` | 2FA 登录字段名 | 默认 `otp`，一般不用填 |
 | `NS_TOTP_FIELDS` | 2FA 字段名候选列表 | 默认 `otp,code,totp,twoFactorCode,two_factor_code,mfaCode` |
@@ -266,8 +264,6 @@ DD_BOT_SECRET: ${{ secrets.DD_BOT_SECRET }}
 | `SOLVER_TYPE` | 验证码平台 | Secrets |
 | `CLIENTT_KEY` | YesCaptcha Key | Secrets |
 | `API_BASE_URL` | YesCaptcha API | Secrets |
-| `NS_CAPTCHA_FIELD` | 登录验证码字段名，默认 `token` | Secrets |
-| `NS_CAPTCHA_FIELDS` | 登录验证码字段名候选列表 | Secrets |
 | `NS_TOTP_SECRET` | 2FA/TOTP 密钥 | Secrets |
 | `NS_TOTP_FIELD` | 2FA 字段名，默认 `otp` | Secrets |
 | `NS_TOTP_FIELDS` | 2FA 字段名候选列表 | Secrets |

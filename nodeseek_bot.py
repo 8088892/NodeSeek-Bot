@@ -67,8 +67,6 @@ SOLVER_TYPE = os.getenv("SOLVER_TYPE", "turnstile")
 API_BASE_URL = os.getenv("API_BASE_URL", "")
 CLIENT_KEY = os.getenv("CLIENTT_KEY", "")
 NS_RANDOM = os.getenv("NS_RANDOM", "true")
-NS_CAPTCHA_FIELD = os.getenv("NS_CAPTCHA_FIELD", "token") or "token"
-NS_CAPTCHA_FIELDS = [f.strip() for f in os.getenv("NS_CAPTCHA_FIELDS", "token,turnstileToken,cfTurnstileToken,cf-turnstile-response,captchaToken").split(",") if f.strip()]
 NS_TOTP_SECRET = os.getenv("NS_TOTP_SECRET", "").replace(" ", "")
 NS_TOTP_FIELD = os.getenv("NS_TOTP_FIELD", "otp") or "otp"
 NS_TOTP_FIELDS = [f.strip() for f in os.getenv("NS_TOTP_FIELDS", "otp,code,totp,twoFactorCode,two_factor_code,mfaCode").split(",") if f.strip()]
@@ -254,64 +252,6 @@ def _need_2fa(resp_json):
     return any(marker in text for marker in markers)
 
 
-def _field_not_allowed(resp_json, field):
-    text = json.dumps(resp_json, ensure_ascii=False).lower()
-    field_lower = field.lower()
-    patterns = [
-        f'"{field_lower}" is not allowed',
-        f"'{field_lower}' is not allowed",
-        f"{field_lower} is not allowed",
-        f'"{field_lower}"不允许',
-    ]
-    compact_text = re.sub(r"[^a-z0-9_-]+", "", text)
-    compact_field = re.sub(r"[^a-z0-9_-]+", "", field_lower)
-    return any(pattern in text for pattern in patterns) or f"{compact_field}isnotallowed" in compact_text
-
-
-def _build_login_payloads(user, password, captcha_token):
-    """生成登录 payload 候选，兼容 NodeSeek 登录字段变动"""
-    base = {"username": user, "password": password}
-    payloads = []
-    seen = set()
-
-    captcha_fields = []
-    if NS_CAPTCHA_FIELD:
-        captcha_fields.append(NS_CAPTCHA_FIELD)
-    for field in NS_CAPTCHA_FIELDS:
-        if field not in captcha_fields:
-            captcha_fields.append(field)
-
-    if captcha_token:
-        for field in captcha_fields:
-            item = dict(base)
-            item[field] = captcha_token
-            # 旧版接口曾需要 source=turnstile；新版可能会拒绝 token/source，所以后面还有无 source 候选。
-            if field == "token":
-                item["source"] = "turnstile"
-            key = tuple(sorted(item.keys()))
-            if key not in seen:
-                seen.add(key)
-                payloads.append(item)
-
-        for field in captcha_fields:
-            item = dict(base)
-            item[field] = captcha_token
-            key = tuple(sorted(item.keys()))
-            if key not in seen:
-                seen.add(key)
-                payloads.append(item)
-
-    key = tuple(sorted(base.keys()))
-    if key not in seen:
-        payloads.append(base)
-    return payloads
-
-
-def _payload_label(payload):
-    extras = [k for k in payload.keys() if k not in {"username", "password"}]
-    return "+".join(extras) if extras else "username+password"
-
-
 def _post_login(session, data, headers):
     resp = session.post(
         "https://www.nodeseek.com/api/account/signIn",
@@ -358,7 +298,12 @@ def session_login(user, password):
     session = cffi_requests.Session(impersonate="chrome110")
     session.get("https://www.nodeseek.com/signIn.html")
 
-    payloads = _build_login_payloads(user, password, token)
+    data = {
+        "username": user,
+        "password": password,
+        "token": token,
+        "source": "turnstile",
+    }
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
         "sec-ch-ua": '"Not A(Brand";v="99", "Microsoft Edge";v="121", "Chromium";v="121"',
@@ -381,31 +326,23 @@ def session_login(user, password):
             if field not in candidate_fields:
                 candidate_fields.append(field)
 
-        resp_json = None
+        # 如果配置了 TOTP，就逐个尝试候选字段；字段名不确定时更稳。
         if totp_code:
-            # payload 字段和 2FA 字段都可能变化；逐个组合尝试。
-            for payload in payloads:
-                for field in candidate_fields:
-                    login_data = dict(payload)
-                    login_data[field] = totp_code
-                    print(f"尝试登录 payload: {_payload_label(payload)}；2FA字段: {field}")
-                    resp_json = _post_login(session, login_data, headers)
-                    if resp_json.get("success"):
-                        return _login_success_cookie(session)
-                    if _field_not_allowed(resp_json, field):
-                        print(f"服务端不接受 2FA 字段: {field}")
-                        break
-        else:
-            for payload in payloads:
-                print(f"尝试登录 payload: {_payload_label(payload)}")
-                resp_json = _post_login(session, payload, headers)
+            resp_json = None
+            for idx, field in enumerate(candidate_fields):
+                login_data = dict(data)
+                login_data[field] = totp_code
+                print(f"已生成 2FA/TOTP 验证码，尝试字段: {field}")
+                resp_json = _post_login(session, login_data, headers)
                 if resp_json.get("success"):
                     return _login_success_cookie(session)
-                # 如果旧版 token/source 被新版接口拒绝，继续试下一个 payload。
-                rejected = [k for k in payload.keys() if k not in {"username", "password"} and _field_not_allowed(resp_json, k)]
-                if rejected:
-                    print(f"服务端不接受字段: {', '.join(rejected)}，尝试其它 payload")
-                    continue
+                # 如果服务端返回完全不像 2FA 问题，通常继续试字段也没意义，但多试几种字段成本很低。
+                if idx == 0 and not _need_2fa(resp_json):
+                    print(f"首个 2FA 字段未通过，继续尝试其它候选字段")
+        else:
+            resp_json = _post_login(session, data, headers)
+            if resp_json.get("success"):
+                return _login_success_cookie(session)
 
         msg = resp_json.get("message") or resp_json
         LOGIN_LAST_ERROR = str(msg)
