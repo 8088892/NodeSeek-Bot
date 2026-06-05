@@ -59,7 +59,7 @@ load_existing_env() {
 install_packages() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y git python3 python3-venv python3-pip curl ca-certificates xvfb fonts-wqy-zenhei
+  apt-get install -y git python3 python3-venv python3-pip curl ca-certificates xvfb fonts-wqy-zenhei x11vnc websockify novnc
 
   if ! command -v google-chrome >/dev/null 2>&1 && ! command -v chromium >/dev/null 2>&1; then
     apt-get install -y chromium || true
@@ -250,6 +250,9 @@ main() {
   echo
   echo "只更新代码和依赖："
   echo "  bash $INSTALL_DIR/install_vps.sh --update"
+  echo
+  echo "手动浏览器验证并写回 Cookie（仅 VPS 手动执行，不会被 GitHub Actions 调用）："
+  echo "  bash $INSTALL_DIR/manual_login.sh"
   echo
   echo "当前定时任务："
   crontab -l | grep 'NodeSeek-Bot' || true

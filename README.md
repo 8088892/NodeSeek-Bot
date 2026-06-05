@@ -213,6 +213,41 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/ins
 - 默认关闭评论：`NS_COMMENT=false`。
 - 如果 Cookie 过期并且账号密码登录成功，VPS 本地会自动把新 Cookie 写回 `.env`。
 
+
+## 🧩 VPS 手动验证登录（和 GitHub Actions 隔离）
+
+NodeSeek 新版登录页的 Turnstile 验证可能不会在 GitHub Actions / 普通 requests 里自动通过。为避免云端随机 IP 反复触发风控，仓库提供了一个**仅 VPS 手动执行**的辅助脚本：
+
+```bash
+bash /opt/NodeSeek-Bot/manual_login.sh
+```
+
+它和主签到脚本是隔离的：
+
+- GitHub Actions 不会调用 `manual_login.sh`
+- cron 定时任务不会调用 `manual_login.sh`
+- 主签到仍然运行 `nodeseek_bot.py`
+- `manual_login.sh` 只在你手动执行时临时启动远程浏览器
+
+流程：
+
+1. VPS 临时启动 Chromium + noVNC
+2. 终端和 Telegram 推送一个临时浏览器链接和密码
+3. 你用手机打开链接，在 VPS 浏览器里手动完成 NodeSeek 登录 / Turnstile
+4. 回到 VPS 终端按 Enter
+5. 脚本提取 NodeSeek Cookie，写回 `/opt/NodeSeek-Bot/.env`
+6. 自动关闭临时 noVNC 入口
+
+常用命令：
+
+```bash
+bash /opt/NodeSeek-Bot/manual_login.sh
+```
+
+如果手机不好输入账号密码，脚本会尝试从 `.env` 里的 `USER` / `PASS` 自动填入，之后你只需要手动验证/点击登录。
+
+> 这个脚本不是绕过 Cloudflare；它只是让你本人在 VPS 浏览器里完成验证，然后保存 Cookie 供后续自动签到使用。
+
 ## 📱 多平台通知（可选）
 
 `notify.py` 内置了 15+ 种通知渠道，**只需在 `.github/workflows/bot.yml` 的 `env` 段添加对应变量**即可同时启用多条渠道：
