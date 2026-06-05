@@ -262,6 +262,19 @@ def _post_login(session, data, headers):
         return {"success": False, "message": resp.text[:300], "status_code": resp.status_code}
 
 
+def _build_prelogin_headers(session):
+    headers = {}
+    try:
+        for cookie_name in ("security_token", "csrf_token"):
+            value = session.cookies.get(cookie_name)
+            if value:
+                headers["x-security-token"] = value
+                break
+    except Exception:
+        pass
+    return headers
+
+
 def session_login(user, password):
     """使用账号密码登录，返回 cookie 字符串"""
     try:
@@ -291,12 +304,7 @@ def session_login(user, password):
     session = cffi_requests.Session(impersonate="chrome110")
     session.get("https://www.nodeseek.com/signIn.html")
 
-    data = {
-        "username": user,
-        "password": password,
-        "token": token,
-        "source": "turnstile",
-    }
+    data = {"username": user, "password": password}
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
         "sec-ch-ua": '"Not A(Brand";v="99", "Microsoft Edge";v="121", "Chromium";v="121"',
@@ -309,6 +317,9 @@ def session_login(user, password):
         "referer": "https://www.nodeseek.com/signIn.html",
         "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
         "Content-Type": "application/json",
+        "x-captcha-token": token,
+        "x-captcha-source": "turnstile",
+        **_build_prelogin_headers(session),
     }
     try:
         totp_code = get_totp_code()
@@ -319,20 +330,25 @@ def session_login(user, password):
             if field not in candidate_fields:
                 candidate_fields.append(field)
 
-        # 如果配置了 TOTP，就逐个尝试候选字段；字段名不确定时更稳。
+        # 浏览器真实请求把 Turnstile token 放在 header，body 只放 username/password。
+        resp_json = None
         if totp_code:
-            resp_json = None
-            for idx, field in enumerate(candidate_fields):
-                login_data = dict(data)
-                login_data[field] = totp_code
-                print(f"已生成 2FA/TOTP 验证码，尝试字段: {field}")
-                resp_json = _post_login(session, login_data, headers)
-                if resp_json.get("success"):
-                    return _login_success_cookie(session)
-                # 如果服务端返回完全不像 2FA 问题，通常继续试字段也没意义，但多试几种字段成本很低。
-                if idx == 0 and not _need_2fa(resp_json):
-                    print(f"首个 2FA 字段未通过，继续尝试其它候选字段")
+            print("尝试登录 payload: username+password + captcha headers")
+            resp_json = _post_login(session, data, headers)
+            if resp_json.get("success") and resp_json.get("need2FA"):
+                otp_session = resp_json.get("otpSession") or resp_json.get("otp_session")
+                for field in ("otp_code", *candidate_fields):
+                    login_data = {field: totp_code}
+                    if otp_session:
+                        login_data["otp_session"] = otp_session
+                    print(f"已生成 2FA/TOTP 验证码，尝试字段: {field}")
+                    resp_json = _post_login(session, login_data, headers)
+                    if resp_json.get("success"):
+                        return _login_success_cookie(session)
+            elif resp_json.get("success"):
+                return _login_success_cookie(session)
         else:
+            print("尝试登录 payload: username+password + captcha headers")
             resp_json = _post_login(session, data, headers)
             if resp_json.get("success"):
                 return _login_success_cookie(session)
