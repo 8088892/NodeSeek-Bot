@@ -92,10 +92,9 @@ write_env() {
   echo
   echo "开始配置 NodeSeek Bot。已有配置时，直接回车会保留旧值。"
   echo
-  echo "填写建议："
-  echo "- 只想先跑签到：USER / PASS / TG 信息填好即可，NS_COMMENT 保持 false。"
-  echo "- 已有浏览器 Cookie：可以粘贴到 NS_COOKIE，后续更稳。"
-  echo "- 没开两步验证：NS_TOTP_SECRET 直接回车留空。"
+  echo "基础配置只需要填 NodeSeek 账号、YesCaptcha Key、可选 Cookie 和 Telegram。"
+  echo "Cookie 可留空：脚本会用账号密码 + YesCaptcha 自动登录，成功后写回 Cookie。"
+  echo "两步验证请填 TOTP secret/密钥，不是当前 6 位动态验证码；没开 2FA 就留空。"
   echo
 
   local default_ns_user=""
@@ -105,22 +104,38 @@ write_env() {
 
   ask NS_USER "NodeSeek 用户名" "$default_ns_user"
   ask NS_PASS "NodeSeek 密码" "${PASS:-}" true
+  ask CLIENTT_KEY_VALUE "YesCaptcha Client Key（账号密码自动登录必填）" "${CLIENTT_KEY:-${YESCAPTCHA_CLIENT_KEY:-}}" true
   ask NS_COOKIE_VALUE "NodeSeek Cookie，可留空" "${NS_COOKIE:-}" true
+  ask NS_TOTP_SECRET_VALUE "NodeSeek 两步验证 TOTP secret，可留空" "${NS_TOTP_SECRET:-}" true
 
-  ask SOLVER_TYPE_VALUE "验证码平台，默认 yescaptcha" "${SOLVER_TYPE:-yescaptcha}"
-  ask API_BASE_URL_VALUE "验证码 API 地址" "${API_BASE_URL:-https://api.yescaptcha.com}"
-  ask CLIENTT_KEY_VALUE "YesCaptcha Client Key" "${CLIENTT_KEY:-${YESCAPTCHA_CLIENT_KEY:-}}" true
+  ask TG_BOT_TOKEN_VALUE "Telegram Bot Token，可留空" "${TG_BOT_TOKEN:-}" true
+  ask TG_CHAT_ID_VALUE "Telegram Chat ID，可留空" "${TG_CHAT_ID:-${TG_USER_ID:-}}"
+  ask RUN_TIMES_VALUE "每天运行时间，逗号分隔" "${RUN_TIMES:-00:05,12:05}"
 
-  ask NS_TOTP_SECRET_VALUE "两步验证密钥，可留空；不是 6 位数字" "${NS_TOTP_SECRET:-}" true
-  ask NS_TOTP_FIELD_VALUE "2FA 字段名，不懂就回车" "${NS_TOTP_FIELD:-otp}"
-  ask NS_TOTP_FIELDS_VALUE "2FA 候选字段，不懂就回车" "${NS_TOTP_FIELDS:-otp,code,totp,twoFactorCode,two_factor_code,mfaCode}"
+  ask NS_COMMENT_VALUE "是否开启自动评论，默认 false" "${NS_COMMENT:-false}"
+  ask ADVANCED_VALUE "是否打开高级设置，默认 false" "false"
 
-  ask TG_BOT_TOKEN_VALUE "Telegram Bot Token" "${TG_BOT_TOKEN:-}" true
-  ask TG_CHAT_ID_VALUE "Telegram Chat ID" "${TG_CHAT_ID:-${TG_USER_ID:-}}"
-
-  ask NS_COMMENT_VALUE "是否开启自动评论，建议 false" "${NS_COMMENT:-false}"
-  ask NS_COMMENT_URL_VALUE "评论区 URL" "${NS_COMMENT_URL:-https://www.nodeseek.com/categories/trade}"
-  ask RUN_TIMES_VALUE "每天运行时间，逗号分隔" "00:05,12:05"
+  local advanced_lower
+  advanced_lower="$(printf '%s' "$ADVANCED_VALUE" | tr '[:upper:]' '[:lower:]')"
+  if [ "$advanced_lower" = "true" ] || [ "$advanced_lower" = "yes" ] || [ "$advanced_lower" = "y" ] || [ "$advanced_lower" = "1" ]; then
+    echo
+    echo "高级设置：不确定就直接回车保留默认。"
+    ask SOLVER_TYPE_VALUE "验证码平台" "${SOLVER_TYPE:-yescaptcha}"
+    ask API_BASE_URL_VALUE "验证码 API 地址" "${API_BASE_URL:-https://api.yescaptcha.com}"
+    ask NS_TOTP_FIELD_VALUE "2FA 字段名" "${NS_TOTP_FIELD:-otp}"
+    ask NS_TOTP_FIELDS_VALUE "2FA 候选字段" "${NS_TOTP_FIELDS:-otp,code,totp,twoFactorCode,two_factor_code,mfaCode}"
+    ask NS_COMMENT_URL_VALUE "评论区 URL" "${NS_COMMENT_URL:-https://www.nodeseek.com/categories/trade}"
+    ask NS_DELAY_MIN_VALUE "运行前随机延迟下限（分钟）" "${NS_DELAY_MIN:-0}"
+    ask NS_DELAY_MAX_VALUE "运行前随机延迟上限（分钟）" "${NS_DELAY_MAX:-0}"
+  else
+    SOLVER_TYPE_VALUE="${SOLVER_TYPE:-yescaptcha}"
+    API_BASE_URL_VALUE="${API_BASE_URL:-https://api.yescaptcha.com}"
+    NS_TOTP_FIELD_VALUE="${NS_TOTP_FIELD:-otp}"
+    NS_TOTP_FIELDS_VALUE="${NS_TOTP_FIELDS:-otp,code,totp,twoFactorCode,two_factor_code,mfaCode}"
+    NS_COMMENT_URL_VALUE="${NS_COMMENT_URL:-https://www.nodeseek.com/categories/trade}"
+    NS_DELAY_MIN_VALUE="${NS_DELAY_MIN:-0}"
+    NS_DELAY_MAX_VALUE="${NS_DELAY_MAX:-0}"
+  fi
 
   cat > "$INSTALL_DIR/.env" <<EOF
 USER=$(quote_env "$NS_USER")
@@ -145,8 +160,8 @@ GITHUB_REPOSITORY="vmenzo/NodeSeek-Bot"
 
 NS_COMMENT=$(quote_env "$NS_COMMENT_VALUE")
 NS_COMMENT_URL=$(quote_env "$NS_COMMENT_URL_VALUE")
-NS_DELAY_MIN="0"
-NS_DELAY_MAX="0"
+NS_DELAY_MIN=$(quote_env "$NS_DELAY_MIN_VALUE")
+NS_DELAY_MAX=$(quote_env "$NS_DELAY_MAX_VALUE")
 HEADLESS="false"
 NS_RANDOM="true"
 EOF
