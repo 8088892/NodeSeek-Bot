@@ -70,8 +70,6 @@ NS_RANDOM = os.getenv("NS_RANDOM", "true")
 NS_TOTP_SECRET = os.getenv("NS_TOTP_SECRET", "").replace(" ", "")
 NS_TOTP_FIELD = os.getenv("NS_TOTP_FIELD", "otp") or "otp"
 NS_TOTP_FIELDS = [f.strip() for f in os.getenv("NS_TOTP_FIELDS", "otp,code,totp,twoFactorCode,two_factor_code,mfaCode").split(",") if f.strip()]
-LOGIN_LAST_ERROR = ""
-LOGIN_NEED_2FA = False
 
 # 通知配置
 TG_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
@@ -265,10 +263,7 @@ def _post_login(session, data, headers):
 
 
 def session_login(user, password):
-    """使用账号密码登录，返回 cookie 字符串；失败原因写入 LOGIN_LAST_ERROR"""
-    global LOGIN_LAST_ERROR, LOGIN_NEED_2FA
-    LOGIN_LAST_ERROR = ""
-    LOGIN_NEED_2FA = False
+    """使用账号密码登录，返回 cookie 字符串"""
     try:
         if SOLVER_TYPE.lower() == "yescaptcha":
             solver = YesCaptchaSolver(
@@ -287,12 +282,10 @@ def session_login(user, password):
             verbose=True,
         )
         if not token:
-            LOGIN_LAST_ERROR = "验证码解析失败"
-            print(LOGIN_LAST_ERROR)
+            print("验证码解析失败")
             return None
     except Exception as e:
-        LOGIN_LAST_ERROR = f"验证码错误: {e}"
-        print(LOGIN_LAST_ERROR)
+        print(f"验证码错误: {e}")
         return None
 
     session = cffi_requests.Session(impersonate="chrome110")
@@ -345,19 +338,12 @@ def session_login(user, password):
                 return _login_success_cookie(session)
 
         msg = resp_json.get("message") or resp_json
-        LOGIN_LAST_ERROR = str(msg)
-        if _need_2fa(resp_json):
-            LOGIN_NEED_2FA = True
-            if not totp_code:
-                LOGIN_LAST_ERROR = f"登录需要 2FA/TOTP，但未配置 NS_TOTP_SECRET；原始返回: {msg}"
-                print("登录需要 2FA/TOTP，但未配置 NS_TOTP_SECRET")
-            else:
-                LOGIN_LAST_ERROR = f"2FA/TOTP 已尝试但仍登录失败，可能字段名不对或验证码过期；原始返回: {msg}"
-        print(f"登录失败: {LOGIN_LAST_ERROR}")
+        if _need_2fa(resp_json) and not totp_code:
+            print("登录需要 2FA/TOTP，但未配置 NS_TOTP_SECRET")
+        print(f"登录失败: {msg}")
         return None
     except Exception as e:
-        LOGIN_LAST_ERROR = f"登录异常: {e}"
-        print(LOGIN_LAST_ERROR)
+        print(f"登录异常: {e}")
         return None
 
 
@@ -867,7 +853,6 @@ if __name__ == "__main__":
     all_results = []
     cookies_updated = False
     cookie_refresh_events = []
-    login_failure_events = []
     new_cookie_list = []
 
     # 确定要处理的总账号数 = max(密码账号数, 已存cookie数)
@@ -930,10 +915,7 @@ if __name__ == "__main__":
                 else:
                     result["error"] = f"签到失败: {msg}"
             else:
-                login_error = LOGIN_LAST_ERROR or "登录失败"
-                result["error"] = login_error
-                if LOGIN_NEED_2FA:
-                    login_failure_events.append(f"❌ {display}: {login_error}。请补充 NS_TOTP_SECRET 或手动填写 NS_COOKIE")
+                result["error"] = "登录失败"
 
         # 3. 既没有有效Cookie也没有密码
         if not active_cookie and not pw_info:
@@ -960,10 +942,6 @@ if __name__ == "__main__":
     if cookies_updated and new_cookie_list:
         all_cookies_new = "|".join([c for c in new_cookie_list if c.strip()])
         save_cookie("NS_COOKIE", all_cookies_new)
-
-    # ── 登录失败提醒 ──
-    if login_failure_events:
-        tg_send("<b>NodeSeek 登录需要处理</b>", "\n".join(login_failure_events))
 
     # ── Cookie 刷新提醒 ──
     if cookie_refresh_events:
