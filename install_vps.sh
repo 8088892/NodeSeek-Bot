@@ -109,7 +109,7 @@ write_env() {
 
   ask SOLVER_TYPE_VALUE "验证码平台，默认 yescaptcha" "${SOLVER_TYPE:-yescaptcha}"
   ask API_BASE_URL_VALUE "验证码 API 地址" "${API_BASE_URL:-https://api.yescaptcha.com}"
-  ask CLIENTT_KEY_VALUE "YesCaptcha Client Key" "${CLIENTT_KEY:-}" true
+  ask CLIENTT_KEY_VALUE "YesCaptcha Client Key" "${CLIENTT_KEY:-${YESCAPTCHA_CLIENT_KEY:-}}" true
 
   ask NS_TOTP_SECRET_VALUE "两步验证密钥，可留空；不是 6 位数字" "${NS_TOTP_SECRET:-}" true
   ask NS_TOTP_FIELD_VALUE "2FA 字段名，不懂就回车" "${NS_TOTP_FIELD:-otp}"
@@ -130,6 +130,7 @@ NS_COOKIE=$(quote_env "$NS_COOKIE_VALUE")
 SOLVER_TYPE=$(quote_env "$SOLVER_TYPE_VALUE")
 API_BASE_URL=$(quote_env "$API_BASE_URL_VALUE")
 CLIENTT_KEY=$(quote_env "$CLIENTT_KEY_VALUE")
+YESCAPTCHA_CLIENT_KEY=$(quote_env "$CLIENTT_KEY_VALUE")
 
 NS_TOTP_SECRET=$(quote_env "$NS_TOTP_SECRET_VALUE")
 NS_TOTP_FIELD=$(quote_env "$NS_TOTP_FIELD_VALUE")

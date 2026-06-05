@@ -63,9 +63,9 @@ COMMENT_BUYING = [
 COMMENT_DONE = []
 
 # ── 配置 ──────────────────────────────────────────────
-SOLVER_TYPE = os.getenv("SOLVER_TYPE", "turnstile")
+SOLVER_TYPE = os.getenv("SOLVER_TYPE", "yescaptcha")
 API_BASE_URL = os.getenv("API_BASE_URL", "")
-CLIENT_KEY = os.getenv("CLIENTT_KEY", "")
+CLIENT_KEY = os.getenv("CLIENTT_KEY") or os.getenv("YESCAPTCHA_CLIENT_KEY", "")
 NS_RANDOM = os.getenv("NS_RANDOM", "true")
 NS_TOTP_SECRET = os.getenv("NS_TOTP_SECRET", "").replace(" ", "")
 NS_TOTP_FIELD = os.getenv("NS_TOTP_FIELD", "otp") or "otp"

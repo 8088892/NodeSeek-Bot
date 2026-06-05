@@ -64,9 +64,9 @@ jobs:
           NS_COOKIE: ${{ vars.NS_COOKIE || secrets.NS_COOKIE }}
 
           # ── 验证码 ──
-          SOLVER_TYPE: ${{ secrets.SOLVER_TYPE }}
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
-          CLIENTT_KEY: ${{ secrets.CLIENTT_KEY }}
+          SOLVER_TYPE: ${{ secrets.SOLVER_TYPE || 'yescaptcha' }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL || 'https://api.yescaptcha.com' }}
+          CLIENTT_KEY: ${{ secrets.CLIENTT_KEY || secrets.YESCAPTCHA_CLIENT_KEY }}
           NS_TOTP_SECRET: ${{ secrets.NS_TOTP_SECRET }}
           NS_TOTP_FIELD: ${{ secrets.NS_TOTP_FIELD }}
           NS_TOTP_FIELDS: ${{ secrets.NS_TOTP_FIELDS }}

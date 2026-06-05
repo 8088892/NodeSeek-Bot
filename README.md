@@ -78,7 +78,7 @@ NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，
 | 变量 | 说明 | 值示例 |
 |------|------|--------|
 | `SOLVER_TYPE` | 验证码平台 | `yescaptcha` |
-| `CLIENTT_KEY` | YesCaptcha Client Key | 从后台复制 |
+| `CLIENTT_KEY` / `YESCAPTCHA_CLIENT_KEY` | YesCaptcha Client Key | 从后台复制，两个变量名二选一即可 |
 | `API_BASE_URL` | YesCaptcha API 地址 | `https://api.yescaptcha.com` |
 | `NS_TOTP_SECRET` | NodeSeek 两步验证/TOTP 密钥 | 开启 2FA 时扫码页的 secret，非 6 位数字 |
 | `NS_TOTP_FIELD` | 2FA 登录字段名 | 默认 `otp`，一般不用填 |
@@ -191,6 +191,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/ins
 | `NS_COOKIE` | 可以留空；如果你已经有浏览器 Cookie，可以粘贴，最稳 |
 | `SOLVER_TYPE` | 默认 `yescaptcha` |
 | `CLIENTT_KEY` | YesCaptcha 的 Client Key |
+| `YESCAPTCHA_CLIENT_KEY` | YesCaptcha Client Key，和 `CLIENTT_KEY` 二选一 |
 | `API_BASE_URL` | 默认 `https://api.yescaptcha.com` |
 | `NS_TOTP_SECRET` | 没开 2FA 就留空；开了就填二维码背后的字母 secret，不是 6 位数字 |
 | `NS_TOTP_FIELD` | 不懂就回车，默认 `otp` |
