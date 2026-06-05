@@ -67,6 +67,7 @@ SOLVER_TYPE = os.getenv("SOLVER_TYPE", "turnstile")
 API_BASE_URL = os.getenv("API_BASE_URL", "")
 CLIENT_KEY = os.getenv("CLIENTT_KEY", "")
 NS_RANDOM = os.getenv("NS_RANDOM", "true")
+NS_ALLOW_PASSWORD_LOGIN = os.getenv("NS_ALLOW_PASSWORD_LOGIN", "false").lower() == "true"
 NS_CAPTCHA_FIELD = os.getenv("NS_CAPTCHA_FIELD", "token") or "token"
 NS_CAPTCHA_FIELDS = [f.strip() for f in os.getenv("NS_CAPTCHA_FIELDS", "token,turnstileToken,cfTurnstileToken,cf-turnstile-response,captchaToken").split(",") if f.strip()]
 NS_TOTP_SECRET = os.getenv("NS_TOTP_SECRET", "").replace(" ", "")
@@ -968,8 +969,12 @@ if __name__ == "__main__":
                 cookie_invalid_msg = msg
                 print(f"Cookie 失效: {msg}")
 
-        # 2. Cookie 无效或无Cookie，尝试密码登录
-        if not active_cookie and pw_info:
+        # 2. Cookie 无效或无Cookie，按开关决定是否尝试密码登录
+        if not active_cookie and pw_info and not NS_ALLOW_PASSWORD_LOGIN:
+            result["error"] = "Cookie 无效/未配置，且 NS_ALLOW_PASSWORD_LOGIN=false，已跳过账号密码登录"
+            login_failure_events.append(f"⚠️ {display}: Cookie 无效/未配置。当前已禁用账号密码登录，避免反复触发验证码/风控；请手动填写 NS_COOKIE，或临时设置 NS_ALLOW_PASSWORD_LOGIN=true 测试。")
+
+        if not active_cookie and pw_info and NS_ALLOW_PASSWORD_LOGIN:
             print("Cookie 无效，使用密码登录...")
             new_cookie = session_login(pw_info["user"], pw_info["password"])
             if new_cookie:

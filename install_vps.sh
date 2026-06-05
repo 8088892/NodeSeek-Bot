@@ -115,6 +115,7 @@ write_env() {
   ask TG_BOT_TOKEN_VALUE "Telegram Bot Token" "${TG_BOT_TOKEN:-}" true
   ask TG_CHAT_ID_VALUE "Telegram Chat ID" "${TG_CHAT_ID:-${TG_USER_ID:-}}"
 
+  ask NS_ALLOW_PASSWORD_LOGIN_VALUE "是否允许 Cookie 失效后账号密码登录 NS_ALLOW_PASSWORD_LOGIN，建议 false" "${NS_ALLOW_PASSWORD_LOGIN:-false}"
   ask NS_COMMENT_VALUE "是否开启自动评论 NS_COMMENT，建议先 false" "${NS_COMMENT:-false}"
   ask NS_COMMENT_URL_VALUE "评论区 URL" "${NS_COMMENT_URL:-https://www.nodeseek.com/categories/trade}"
   ask RUN_TIMES_VALUE "每天运行时间，逗号分隔，24小时制" "00:05,12:05"
@@ -141,6 +142,7 @@ TG_USER_ID=$(quote_env "$TG_CHAT_ID_VALUE")
 GH_PAT=""
 GITHUB_REPOSITORY="vmenzo/NodeSeek-Bot"
 
+NS_ALLOW_PASSWORD_LOGIN=$(quote_env "$NS_ALLOW_PASSWORD_LOGIN_VALUE")
 NS_COMMENT=$(quote_env "$NS_COMMENT_VALUE")
 NS_COMMENT_URL=$(quote_env "$NS_COMMENT_URL_VALUE")
 NS_DELAY_MIN="0"
