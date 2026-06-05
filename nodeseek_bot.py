@@ -272,34 +272,29 @@ def session_login(user, password):
     try:
         totp_code = get_totp_code()
         candidate_fields = []
-        if NS_TOTP_FIELDS:
-            candidate_fields.extend(NS_TOTP_FIELDS)
-        if NS_TOTP_FIELD not in candidate_fields:
+        if NS_TOTP_FIELD:
             candidate_fields.append(NS_TOTP_FIELD)
+        for field in NS_TOTP_FIELDS:
+            if field not in candidate_fields:
+                candidate_fields.append(field)
 
-        # 如果配置了 TOTP，首次登录请求就带上验证码字段；默认字段 otp。
-        login_data = dict(data)
+        # 如果配置了 TOTP，就逐个尝试候选字段；字段名不确定时更稳。
         if totp_code:
-            login_data[candidate_fields[0]] = totp_code
-            print(f"已生成 2FA/TOTP 验证码，使用字段: {candidate_fields[0]}")
-
-        resp_json = _post_login(session, login_data, headers)
-        if resp_json.get("success"):
-            return _login_success_cookie(session)
-
-        # 字段名不确定时，可用 NS_TOTP_FIELDS=otp,code,totp,twoFactorCode 批量尝试。
-        if totp_code and _need_2fa(resp_json):
-            tried = {candidate_fields[0]}
-            for field in candidate_fields[1:]:
-                if field in tried:
-                    continue
-                tried.add(field)
-                retry_data = dict(data)
-                retry_data[field] = totp_code
-                print(f"检测到 2FA 要求，重试字段: {field}")
-                resp_json = _post_login(session, retry_data, headers)
+            resp_json = None
+            for idx, field in enumerate(candidate_fields):
+                login_data = dict(data)
+                login_data[field] = totp_code
+                print(f"已生成 2FA/TOTP 验证码，尝试字段: {field}")
+                resp_json = _post_login(session, login_data, headers)
                 if resp_json.get("success"):
                     return _login_success_cookie(session)
+                # 如果服务端返回完全不像 2FA 问题，通常继续试字段也没意义，但多试几种字段成本很低。
+                if idx == 0 and not _need_2fa(resp_json):
+                    print(f"首个 2FA 字段未通过，继续尝试其它候选字段")
+        else:
+            resp_json = _post_login(session, data, headers)
+            if resp_json.get("success"):
+                return _login_success_cookie(session)
 
         msg = resp_json.get("message") or resp_json
         if _need_2fa(resp_json) and not totp_code:
