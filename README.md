@@ -1,4 +1,4 @@
-# NodeSeek Bot — 自动签到 + 评论 + 通知
+# NodeSeek Bot — 自动签到 + 评论 + 通知【已维护适配最新版登录方式】
 
 [![NodeSeek 签到](https://github.com/8088892/NodeSeek-Bot/actions/workflows/bot.yml/badge.svg)](https://github.com/8088892/NodeSeek-Bot/actions/workflows/bot.yml)
 
