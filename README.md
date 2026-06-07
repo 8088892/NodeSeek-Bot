@@ -39,7 +39,7 @@ NodeSeek 论坛全自动工具：每日签到 + 随机评论 + 多账号 + 多�
 
 ### 3️⃣ 配置验证码服务
 
-NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，按次计费）：
+NodeSeek 使用 Turnstile 验证码，推荐 **YesCaptcha**（最低充值 $1，按次计费）：新人可领1000积分 够使用很久了
 
 👉 [注册 YesCaptcha（推广链接）](https://yescaptcha.com/i/fyzjbA)
 
