@@ -33,16 +33,8 @@ except ImportError:
 COMMENT_SELLING = [
     "帮顶，祝早出",
     "路过帮顶",
-    "价格不错，帮顶",
-    "顺手顶一下",
-    "祝顺利出",
     "帮顶支持",
-    "看着可以，帮顶",
-    "顶一下",
-    "祝交易顺利",
-    "蹲个有缘人",
     "帮顶，早出",
-    "路过支持下",
 ]
 
 # 收帖（买东西）：尽量像真人，不要太像统一模板
@@ -50,13 +42,7 @@ COMMENT_BUYING = [
     "帮顶，祝早收",
     "路过帮顶",
     "祝早收到",
-    "顺手顶一下",
-    "蹲个好价",
     "帮顶支持",
-    "祝顺利收到",
-    "顶一下",
-    "路过支持下",
-    "祝收到合适的",
 ]
 
 # 状态已完成的帖子不评论
@@ -723,7 +709,7 @@ def selenium_comment(ns_cookie):
 
         # 过滤置顶帖
         valid_posts = [p for p in posts if not p.find_elements(By.CSS_SELECTOR, ".pined")]
-        post_count = random.randint(3, 5)
+        post_count = random.randint(1, 3)
         selected = random.sample(valid_posts, min(post_count, len(valid_posts)))
 
         selected_urls = []
