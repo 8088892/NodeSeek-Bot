@@ -59,7 +59,7 @@ load_existing_env() {
 install_packages() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install -y git python3 python3-venv python3-pip curl ca-certificates xvfb fonts-wqy-zenhei x11vnc websockify novnc
+  apt-get install -y git python3 python3-venv python3-pip curl ca-certificates xvfb fonts-wqy-zenhei x11vnc websockify novnc cron
 
   if ! command -v google-chrome >/dev/null 2>&1 && ! command -v chromium >/dev/null 2>&1; then
     apt-get install -y chromium || true
@@ -189,6 +189,24 @@ EOF
 }
 
 install_cron() {
+  if ! command -v crontab >/dev/null 2>&1; then
+    echo "未找到 crontab，尝试安装 cron。"
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y cron
+  fi
+
+  if ! command -v crontab >/dev/null 2>&1; then
+    echo "cron 安装失败，未找到 crontab 命令。"
+    exit 1
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable --now cron 2>/dev/null || systemctl restart cron 2>/dev/null || true
+  elif command -v service >/dev/null 2>&1; then
+    service cron start 2>/dev/null || true
+  fi
+
   timedatectl set-timezone "$CRON_TIMEZONE" 2>/dev/null || true
   local times
   times="$(cat "$INSTALL_DIR/.run_times")"
