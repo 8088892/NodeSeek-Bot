@@ -110,7 +110,7 @@ write_env() {
 
   ask TG_BOT_TOKEN_VALUE "Telegram Bot Token，可留空" "${TG_BOT_TOKEN:-}" true
   ask TG_CHAT_ID_VALUE "Telegram Chat ID，可留空" "${TG_CHAT_ID:-${TG_USER_ID:-}}"
-  ask RUN_TIMES_VALUE "每天运行时间，逗号分隔" "${RUN_TIMES:-00:05,12:05}"
+  ask RUN_TIMES_VALUE "每天运行时间，逗号分隔" "${RUN_TIMES:-00:05}"
 
   ask NS_COMMENT_VALUE "是否开启自动评论，默认 false" "${NS_COMMENT:-false}"
   ask ADVANCED_VALUE "是否打开高级设置，默认 false" "false"

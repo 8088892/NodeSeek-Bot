@@ -17,7 +17,7 @@ NodeSeek 论坛全自动工具：每日签到 + 随机评论 + 多账号 + 多�
 | 🔄 Cookie 智能管理 | Cookie 优先签到 → 过期自动密码刷新 → 存回 GitHub Variables |
 | 📊 签到统计 | 查询近 30 天鸡腿收益，每次推送汇总 |
 | 📱 多平台通知 | Telegram / Bark / 钉钉 / 飞书 / Server酱 / PushPlus / 企业微信 / SMTP 邮件等 15+ 渠道 |
-| 📅 GitHub Actions | 每天两次自动运行（00:05 / 12:05 北京时间），支持手动触发 |
+| 📅 GitHub Actions | 每天一次自动运行（00:05 北京时间），支持手动触发 |
 
 ---
 
@@ -142,7 +142,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/ins
 - 创建 Python 虚拟环境
 - 生成 `.env` 配置文件
 - 创建 `/opt/NodeSeek-Bot/run.sh`
-- 写入每天 `00:05` 和 `12:05` 的 cron 定时任务
+- 写入每天 `00:05` 的 cron 定时任务
 
 ### 日常命令
 
@@ -199,7 +199,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vmenzo/NodeSeek-Bot/main/ins
 | `TG_BOT_TOKEN` | Telegram Bot Token，用来推送通知和手动验证链接 |
 | `TG_CHAT_ID` | Telegram 接收通知的 chat id |
 | `NS_COMMENT` | 默认 `false`，也就是不自动评论 |
-| `RUN_TIMES` | 默认 `00:05,12:05` |
+| `RUN_TIMES` | 默认 `00:05` |
 
 ### Cookie 失效怎么办
 
@@ -285,7 +285,6 @@ DD_BOT_SECRET: ${{ secrets.DD_BOT_SECRET }}
 | 时间 | 北京时间 | UTC |
 |------|----------|-----|
 | 第 1 次 | 00:05 | 16:05 |
-| 第 2 次 | 12:05 | 04:05 |
 
 修改频率：编辑 `.github/workflows/bot.yml` → `schedule` → `cron` 表达式。
 
